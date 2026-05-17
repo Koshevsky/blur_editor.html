@@ -6,545 +6,389 @@
 <title>Blur Editor</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Unbounded:wght@400;700&display=swap');
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #0a0a0f;
-    --surface: #12121a;
-    --surface2: #1a1a26;
+    --bg: #0d0d14;
+    --surface: #13131f;
+    --surface2: #1c1c2e;
     --accent: #7c5cfc;
     --accent2: #fc5c7d;
-    --text: #e8e8f0;
-    --muted: #5a5a78;
-    --border: #2a2a3e;
-    --timeline-h: 56px;
-    --handle-w: 14px;
+    --text: #e2e2f0;
+    --muted: #55556e;
+    --border: #252538;
+    --handle-w: 16px;
   }
 
   html, body {
     height: 100%;
+    width: 100%;
     background: var(--bg);
     color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'SF Mono', 'Fira Code', monospace;
     overflow: hidden;
+    /* КРИТИЧНО: отключаем браузерные жесты чтобы touch работал на canvas */
     touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   #app {
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    gap: 0;
+    width: 100%;
   }
 
-  /* ── HEADER ── */
+  /* HEADER */
   #header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 14px 8px;
-    border-bottom: 1px solid var(--border);
+    padding: 8px 14px;
     background: var(--surface);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+    min-height: 42px;
   }
+  #header h1 { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
+  #hint { font-size: 10px; color: var(--muted); }
 
-  #header h1 {
-    font-family: 'Unbounded', sans-serif;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: var(--accent);
-    text-transform: uppercase;
-  }
-
-  #zone-info {
-    font-size: 10px;
-    color: var(--muted);
-    letter-spacing: 0.06em;
-  }
-
-  /* ── CANVAS WRAPPER ── */
-  #canvas-wrap {
+  /* CANVAS AREA — занимает всё свободное место */
+  #canvas-area {
     flex: 1;
     position: relative;
-    overflow: hidden;
     background: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow: hidden;
+    /* touch-action: none здесь ОБЯЗАТЕЛЬНО */
+    touch-action: none;
+    cursor: crosshair;
   }
 
-  #preview-img {
-    max-width: 100%;
-    max-height: 100%;
-    display: block;
-    pointer-events: none;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
-  /* selection rectangle */
-  #sel-rect {
+  #canvas-area canvas {
     position: absolute;
-    border: 2px solid var(--accent);
-    background: rgba(124, 92, 252, 0.18);
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  /* поверх canvas — svg для рисования прямоугольника */
+  #overlay-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
+    overflow: visible;
+  }
+
+  #draw-rect {
+    fill: rgba(124,92,252,0.18);
+    stroke: #7c5cfc;
+    stroke-width: 2;
     display: none;
-    border-radius: 3px;
-    box-shadow: 0 0 0 1px rgba(124,92,252,0.4), inset 0 0 20px rgba(124,92,252,0.06);
   }
-  #sel-rect::before, #sel-rect::after {
-    content: '';
-    position: absolute;
-    background: var(--accent);
-    border-radius: 2px;
-  }
-  /* corner handles */
-  .corner {
-    position: absolute;
-    width: 10px; height: 10px;
-    background: var(--accent);
-    border-radius: 2px;
-    pointer-events: none;
-  }
-  .corner.tl { top: -5px; left: -5px; }
-  .corner.tr { top: -5px; right: -5px; }
-  .corner.bl { bottom: -5px; left: -5px; }
-  .corner.br { bottom: -5px; right: -5px; }
 
-  /* crosshair guide lines */
-  #guide-h, #guide-v {
+  /* угловые ручки */
+  .corner-dot {
+    fill: #7c5cfc;
+    display: none;
+  }
+
+  /* подсказка рисования */
+  #draw-badge {
     position: absolute;
+    bottom: 10px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(124,92,252,.9);
+    color: #fff;
+    font-size: 11px;
+    padding: 5px 14px;
+    border-radius: 14px;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: opacity .2s;
+    white-space: nowrap;
   }
-  #guide-h {
-    left: 0; right: 0; height: 1px;
-    background: rgba(124,92,252,0.35);
-    top: 50%;
-  }
-  #guide-v {
-    top: 0; bottom: 0; width: 1px;
-    background: rgba(124,92,252,0.35);
-    left: 50%;
-  }
-  #canvas-wrap:hover #guide-h,
-  #canvas-wrap:hover #guide-v {
-    opacity: 1;
-  }
+  #draw-badge.show { opacity: 1; }
 
-  /* coords overlay */
-  #coords-overlay {
+  /* координаты */
+  #coords {
     position: absolute;
     top: 8px; left: 8px;
-    background: rgba(10,10,15,0.85);
+    background: rgba(13,13,20,.85);
     border: 1px solid var(--border);
     padding: 4px 8px;
     font-size: 10px;
     color: var(--accent);
     border-radius: 4px;
     display: none;
-    backdrop-filter: blur(4px);
     line-height: 1.7;
   }
 
-  /* ── REGIONS LIST ── */
-  #regions-wrap {
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    max-height: 110px;
-    overflow-y: auto;
-    flex-shrink: 0;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-  }
-
-  .region-row {
-    display: flex;
-    align-items: center;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--border);
-    gap: 8px;
-    animation: slideIn 0.18s ease;
-  }
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateX(-8px); }
-    to   { opacity: 1; transform: translateX(0); }
-  }
-
-  .region-color {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .region-info {
-    flex: 1;
-    font-size: 10px;
-    color: var(--text);
-    letter-spacing: 0.02em;
-  }
-  .region-time {
-    font-size: 10px;
-    color: var(--accent);
-  }
-  .region-del {
-    background: none;
-    border: none;
-    color: var(--accent2);
-    font-size: 14px;
-    cursor: pointer;
-    padding: 0 2px;
-    line-height: 1;
-    flex-shrink: 0;
-  }
-
-  .regions-empty {
-    text-align: center;
-    color: var(--muted);
-    font-size: 10px;
-    padding: 14px;
-    letter-spacing: 0.06em;
-  }
-
-  /* ── TIMELINE ── */
-  #timeline-section {
-    background: var(--surface2);
-    border-top: 1px solid var(--border);
-    padding: 10px 14px;
-    flex-shrink: 0;
-  }
-
-  .tl-label {
-    font-size: 9px;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-  }
-
-  #timeline-track {
-    position: relative;
-    height: 28px;
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    overflow: visible;
-  }
-
-  #tl-range {
+  /* NO IMAGE */
+  #no-img {
     position: absolute;
-    top: 0; bottom: 0;
-    background: rgba(124,92,252,0.28);
-    border-left: 3px solid var(--accent);
-    border-right: 3px solid var(--accent);
-  }
-
-  .tl-handle {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: var(--handle-w);
-    height: 32px;
-    background: var(--accent);
-    border-radius: 4px;
-    cursor: ew-resize;
-    touch-action: none;
+    inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(124,92,252,0.5);
-    z-index: 10;
-  }
-  .tl-handle::before {
-    content: '';
-    width: 2px;
-    height: 12px;
-    background: rgba(255,255,255,0.5);
-    border-radius: 1px;
-    box-shadow: 3px 0 0 rgba(255,255,255,0.5), -3px 0 0 rgba(255,255,255,0.5);
-  }
-
-  #tl-start { left: 0; transform: translate(-50%, -50%); }
-  #tl-end   { right: 0; transform: translate(50%, -50%); }
-
-  #tl-times {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 4px;
-    font-size: 9px;
+    gap: 10px;
     color: var(--muted);
+    font-size: 12px;
   }
+  #no-img svg { opacity: .25; }
 
-  #tl-current-time {
-    text-align: center;
-    font-size: 10px;
-    color: var(--accent);
-    margin-top: 2px;
-    letter-spacing: 0.05em;
-  }
-
-  /* ── BOTTOM BAR ── */
-  #bottom-bar {
-    display: flex;
-    gap: 8px;
-    padding: 10px 14px;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .btn {
-    flex: 1;
-    padding: 11px 8px;
-    border: none;
-    border-radius: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    cursor: pointer;
-    transition: all 0.15s;
-    text-transform: uppercase;
-  }
-  .btn:active { transform: scale(0.97); }
-
-  .btn-secondary {
-    background: var(--surface2);
-    color: var(--muted);
-    border: 1px solid var(--border);
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 4px 16px rgba(124,92,252,0.4);
-  }
-  .btn-primary:disabled {
-    background: var(--border);
-    color: var(--muted);
-    box-shadow: none;
-    cursor: not-allowed;
-  }
-  .btn-add {
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    flex: 0 0 auto;
-    padding: 11px 14px;
-  }
-
-  /* ── TOAST ── */
-  #toast {
-    position: fixed;
-    bottom: 90px;
-    left: 50%;
-    transform: translateX(-50%) translateY(20px);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-size: 11px;
-    padding: 8px 16px;
-    border-radius: 20px;
-    opacity: 0;
-    transition: all 0.25s;
-    pointer-events: none;
-    white-space: nowrap;
-    z-index: 999;
-  }
-  #toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-
-  /* ── LOADING ── */
+  /* LOADING */
   #loading {
-    position: fixed;
+    position: absolute;
     inset: 0;
     background: var(--bg);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
-    z-index: 1000;
+    gap: 14px;
+    z-index: 50;
   }
   #loading.hidden { display: none; }
-
   .spinner {
-    width: 36px; height: 36px;
+    width: 34px; height: 34px;
     border: 3px solid var(--border);
     border-top-color: var(--accent);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .load-txt { font-size: 11px; color: var(--muted); letter-spacing: .08em; }
 
-  .load-text {
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+  /* REGIONS */
+  #regions-bar {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    max-height: 96px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
   }
-
-  /* ── DRAWING MODE indicator ── */
-  #draw-mode-badge {
-    position: absolute;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(124,92,252,0.9);
-    color: #fff;
-    font-size: 10px;
-    padding: 4px 12px;
-    border-radius: 12px;
-    letter-spacing: 0.06em;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
-    white-space: nowrap;
-  }
-  #draw-mode-badge.visible { opacity: 1; }
-
-  /* no-img state */
-  #no-img {
+  .rrow {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 10px;
-    color: var(--muted);
-    font-size: 11px;
-    text-align: center;
-    padding: 20px;
-    display: none;
+    padding: 5px 12px;
+    border-bottom: 1px solid var(--border);
+    gap: 7px;
+    font-size: 10px;
+    animation: fadeIn .15s ease;
   }
-  #no-img svg { opacity: 0.3; }
+  @keyframes fadeIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:none} }
+  .rdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .rinfo { flex: 1; color: var(--text); }
+  .rtime { color: var(--accent); margin-left: 4px; }
+  .rdel { background: none; border: none; color: var(--accent2); font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1; }
+  .rempty { text-align: center; color: var(--muted); font-size: 10px; padding: 12px; letter-spacing: .05em; }
+
+  /* TIMELINE */
+  #tl-section {
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    padding: 9px 14px 7px;
+    flex-shrink: 0;
+  }
+  .tl-lbl { font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; }
+  #tl-track {
+    position: relative;
+    height: 26px;
+    background: var(--bg);
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  #tl-fill {
+    position: absolute; top: 0; bottom: 0;
+    background: rgba(124,92,252,.25);
+    border-left: 3px solid var(--accent);
+    border-right: 3px solid var(--accent);
+    pointer-events: none;
+  }
+  .tl-h {
+    position: absolute; top: 50%;
+    width: var(--handle-w); height: 30px;
+    background: var(--accent);
+    border-radius: 4px;
+    cursor: ew-resize;
+    touch-action: none;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(124,92,252,.5);
+    z-index: 5;
+  }
+  .tl-h::before {
+    content: '';
+    width: 2px; height: 10px;
+    background: rgba(255,255,255,.5);
+    border-radius: 1px;
+    box-shadow: 3px 0 0 rgba(255,255,255,.4), -3px 0 0 rgba(255,255,255,.4);
+  }
+  #tl-hs { transform: translate(-50%, -50%); }
+  #tl-he { transform: translate(50%, -50%); }
+  #tl-info {
+    display: flex; justify-content: space-between;
+    margin-top: 4px; font-size: 9px; color: var(--muted);
+  }
+  #tl-range-lbl { text-align: center; font-size: 10px; color: var(--accent); margin-top: 2px; }
+
+  /* BOTTOM */
+  #bottom {
+    display: flex;
+    gap: 8px;
+    padding: 9px 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .btn {
+    flex: 1; padding: 10px 6px;
+    border: none; border-radius: 8px;
+    font-family: inherit; font-size: 11px; font-weight: 600;
+    letter-spacing: .04em; text-transform: uppercase;
+    cursor: pointer; transition: transform .12s, opacity .12s;
+  }
+  .btn:active { transform: scale(.96); }
+  .btn-sec { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .btn-add { background: transparent; color: var(--accent); border: 1px solid var(--accent); flex: 0 0 auto; padding: 10px 16px; }
+  .btn-pri { background: var(--accent); color: #fff; box-shadow: 0 3px 14px rgba(124,92,252,.4); }
+  .btn-pri:disabled { background: var(--border); color: var(--muted); box-shadow: none; cursor: not-allowed; }
+
+  /* TOAST */
+  #toast {
+    position: fixed; bottom: 80px; left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-size: 11px;
+    padding: 7px 16px; border-radius: 20px;
+    opacity: 0; transition: all .22s;
+    pointer-events: none; white-space: nowrap; z-index: 999;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
-
-<div id="loading">
-  <div class="spinner"></div>
-  <div class="load-text">Загрузка редактора</div>
-</div>
-
 <div id="app">
 
   <div id="header">
     <h1>🎯 Blur Editor</h1>
-    <span id="zone-info">Рисуй область пальцем</span>
+    <span id="hint">Рисуй пальцем область</span>
   </div>
 
-  <div id="canvas-wrap">
-    <img id="preview-img" draggable="false" alt="preview">
+  <div id="canvas-area" id="canvas-area">
+    <!-- canvas для отрисовки превью -->
+    <canvas id="cv"></canvas>
+
+    <!-- SVG поверх для рисования рамки -->
+    <svg id="overlay-svg" xmlns="http://www.w3.org/2000/svg">
+      <rect id="draw-rect" rx="3"/>
+      <circle class="corner-dot" id="c-tl" r="5"/>
+      <circle class="corner-dot" id="c-tr" r="5"/>
+      <circle class="corner-dot" id="c-bl" r="5"/>
+      <circle class="corner-dot" id="c-br" r="5"/>
+    </svg>
+
+    <div id="draw-badge">✏️ РИСУЮ</div>
+    <div id="coords"></div>
+
     <div id="no-img">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
         <polyline points="21 15 16 10 5 21"/>
       </svg>
-      <span>Превью не загружено</span>
+      <span>Превью не загружено —<br>рисуй область как будто видео здесь</span>
     </div>
-    <div id="sel-rect">
-      <div class="corner tl"></div>
-      <div class="corner tr"></div>
-      <div class="corner bl"></div>
-      <div class="corner br"></div>
+
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="load-txt">Загружаю превью…</div>
     </div>
-    <div id="guide-h"></div>
-    <div id="guide-v"></div>
-    <div id="coords-overlay" id="coords-overlay"></div>
-    <div id="draw-mode-badge">✏️ РИСУЮ ОБЛАСТЬ</div>
   </div>
 
-  <div id="regions-wrap">
-    <div class="regions-empty" id="regions-empty">Нет выделенных областей · нарисуй прямоугольник</div>
+  <div id="regions-bar">
+    <div class="rempty" id="rempty">Нет выделенных областей</div>
   </div>
 
-  <div id="timeline-section">
-    <div class="tl-label">Временной диапазон</div>
-    <div id="timeline-track">
-      <div id="tl-range"></div>
-      <div class="tl-handle" id="tl-start"></div>
-      <div class="tl-handle" id="tl-end"></div>
+  <div id="tl-section">
+    <div class="tl-lbl">Временной диапазон</div>
+    <div id="tl-track">
+      <div id="tl-fill"></div>
+      <div class="tl-h" id="tl-hs"></div>
+      <div class="tl-h" id="tl-he"></div>
     </div>
-    <div id="tl-times">
-      <span id="tl-t0">0:00</span>
-      <span id="tl-dur">0:00</span>
+    <div id="tl-info">
+      <span id="tl-s">0:00</span>
+      <span id="tl-d">0:00</span>
     </div>
-    <div id="tl-current-time" id="tl-current-time">Весь диапазон</div>
+    <div id="tl-range-lbl" id="tl-range-lbl">Весь ролик</div>
   </div>
 
-  <div id="bottom-bar">
-    <button class="btn btn-secondary" id="btn-reset">Сброс</button>
+  <div id="bottom">
+    <button class="btn btn-sec" id="btn-reset">Сброс</button>
     <button class="btn btn-add" id="btn-add">+ Добавить</button>
-    <button class="btn btn-primary" id="btn-send" disabled>Применить</button>
+    <button class="btn btn-pri" id="btn-send" disabled>Применить</button>
   </div>
 
 </div>
-
 <div id="toast"></div>
 
 <script>
-// ── CONFIG ──────────────────────────────────────────────────────────
+// ── Telegram ──────────────────────────────────────────────────────────
 const tg = window.Telegram?.WebApp;
-if (tg) {
-  tg.ready();
-  tg.expand();
-  tg.setHeaderColor('#12121a');
-  tg.setBackgroundColor('#0a0a0f');
-}
+if (tg) { tg.ready(); tg.expand(); }
 
-// Получаем параметры из URL: ?img=BASE64_OR_URL&dur=60&frame=0.5
-const params = new URLSearchParams(location.search);
-const imgSrc  = params.get('img')  || '';
-const duration = parseFloat(params.get('dur') || '60');
-const frameT   = parseFloat(params.get('frame') || '0');
+// ── Параметры из URL ───────────────────────────────────────────────────
+const params  = new URLSearchParams(location.search);
+const imgSrc  = params.get('img') || '';          // data:image/jpeg;base64,...
+const duration = Math.max(1, parseFloat(params.get('dur') || '30'));
 
-// ── STATE ────────────────────────────────────────────────────────────
-let regions   = [];         // [{x1,y1,x2,y2,t0,t1,color}]
-let drawing   = false;
-let startPt   = null;       // {x,y} in canvas %
-let currentPt = null;
-
-let tlStart = 0;            // seconds
-let tlEnd   = duration;
-let draggingHandle = null;  // 'start'|'end'|null
+// ── Состояние ─────────────────────────────────────────────────────────
+let regions = [];
+let tlStart = 0, tlEnd = duration;
+let draggingTl = null;   // 'start'|'end'
+let drawing = false;
+let p0 = null, p1 = null;  // {x,y} в долях 0..1 от canvas-area
 
 const COLORS = ['#7c5cfc','#fc5c7d','#5cf8ca','#f8d95c','#fc955c','#5ca8fc'];
 let colorIdx = 0;
 
-// ── DOM ──────────────────────────────────────────────────────────────
-const canvasWrap   = document.getElementById('canvas-wrap');
-const previewImg   = document.getElementById('preview-img');
-const selRect      = document.getElementById('sel-rect');
-const coordsOverlay= document.getElementById('coords-overlay');
-const drawBadge    = document.getElementById('draw-mode-badge');
-const regionsWrap  = document.getElementById('regions-wrap');
-const regionsEmpty = document.getElementById('regions-empty');
-const tlTrack      = document.getElementById('timeline-track');
-const tlRange      = document.getElementById('tl-range');
-const tlStartH     = document.getElementById('tl-start');
-const tlEndH       = document.getElementById('tl-end');
-const tlT0         = document.getElementById('tl-t0');
-const tlDur        = document.getElementById('tl-dur');
-const tlCur        = document.getElementById('tl-current-time');
-const btnAdd       = document.getElementById('btn-add');
-const btnReset     = document.getElementById('btn-reset');
-const btnSend      = document.getElementById('btn-send');
-const loading      = document.getElementById('loading');
-const noImg        = document.getElementById('no-img');
-const zoneInfo     = document.getElementById('zone-info');
+// ── DOM ───────────────────────────────────────────────────────────────
+const area      = document.getElementById('canvas-area');
+const cv        = document.getElementById('cv');
+const ctx       = cv.getContext('2d');
+const drawRect  = document.getElementById('draw-rect');
+const corners   = ['c-tl','c-tr','c-bl','c-br'].map(id => document.getElementById(id));
+const drawBadge = document.getElementById('draw-badge');
+const coordsEl  = document.getElementById('coords');
+const regBar    = document.getElementById('regions-bar');
+const rempty    = document.getElementById('rempty');
+const tlTrack   = document.getElementById('tl-track');
+const tlFill    = document.getElementById('tl-fill');
+const tlHs      = document.getElementById('tl-hs');
+const tlHe      = document.getElementById('tl-he');
+const tlS       = document.getElementById('tl-s');
+const tlD       = document.getElementById('tl-d');
+const tlRlbl    = document.getElementById('tl-range-lbl');
+const btnAdd    = document.getElementById('btn-add');
+const btnReset  = document.getElementById('btn-reset');
+const btnSend   = document.getElementById('btn-send');
+const loading   = document.getElementById('loading');
+const noImg     = document.getElementById('no-img');
+const hint      = document.getElementById('hint');
 
-// ── HELPERS ──────────────────────────────────────────────────────────
+// ── Утилиты ───────────────────────────────────────────────────────────
 function fmt(s) {
-  const m = Math.floor(s/60);
-  const sec = Math.floor(s % 60).toString().padStart(2,'0');
-  return `${m}:${sec}`;
+  const m = Math.floor(s / 60);
+  return `${m}:${Math.floor(s % 60).toString().padStart(2,'0')}`;
 }
-
-function toast(msg, ms=1800) {
+function toast(msg, ms = 1800) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
@@ -552,197 +396,196 @@ function toast(msg, ms=1800) {
   el._t = setTimeout(() => el.classList.remove('show'), ms);
 }
 
-function getCanvasPct(e) {
-  const rect = previewImg.getBoundingClientRect();
-  const touch = e.touches ? e.touches[0] : e;
-  const x = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
-  const y = Math.max(0, Math.min(1, (touch.clientY - rect.top)  / rect.height));
-  return {x, y};
+// ── Canvas resize ─────────────────────────────────────────────────────
+function resizeCanvas() {
+  cv.width  = area.clientWidth;
+  cv.height = area.clientHeight;
+  drawImage();
+}
+const ro = new ResizeObserver(resizeCanvas);
+ro.observe(area);
+
+// ── Загрузка превью ───────────────────────────────────────────────────
+let img = null;
+let imgLoaded = false;
+
+function drawImage() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!img || !imgLoaded) return;
+
+  // вписываем изображение с сохранением пропорций
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const cw = cv.width, ch = cv.height;
+  const scale = Math.min(cw / iw, ch / ih);
+  const dw = iw * scale, dh = ih * scale;
+  const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+  ctx.drawImage(img, dx, dy, dw, dh);
 }
 
-function pctToScreen(px, py) {
-  const rect = previewImg.getBoundingClientRect();
-  const wrapRect = canvasWrap.getBoundingClientRect();
-  return {
-    x: rect.left - wrapRect.left + px * rect.width,
-    y: rect.top  - wrapRect.top  + py * rect.height,
-  };
-}
-
-// ── IMAGE LOAD ───────────────────────────────────────────────────────
 if (imgSrc) {
-  previewImg.src = imgSrc;
-  previewImg.onload = () => {
+  img = new Image();
+  img.onload = () => {
+    imgLoaded = true;
     loading.classList.add('hidden');
     noImg.style.display = 'none';
-    previewImg.style.display = 'block';
-    updateTimelineUI();
+    drawImage();
   };
-  previewImg.onerror = () => {
+  img.onerror = () => {
     loading.classList.add('hidden');
     noImg.style.display = 'flex';
+    toast('Превью не загрузилось — рисуй как обычно');
   };
+  img.src = imgSrc;
 } else {
-  // Demo mode: use placeholder gradient canvas
-  setTimeout(() => {
-    loading.classList.add('hidden');
-    previewImg.src = 'data:image/svg+xml,' + encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920">
-        <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#1a1a2e"/>
-          <stop offset="100%" stop-color="#16213e"/>
-        </linearGradient></defs>
-        <rect width="1080" height="1920" fill="url(#g)"/>
-        <text x="540" y="960" text-anchor="middle" fill="#7c5cfc" font-size="60"
-          font-family="monospace">PREVIEW FRAME</text>
-        <text x="540" y="1020" text-anchor="middle" fill="#5a5a78" font-size="32"
-          font-family="monospace">t = ${frameT.toFixed(2)}s</text>
-      </svg>`
-    );
-    updateTimelineUI();
-  }, 600);
+  loading.classList.add('hidden');
+  noImg.style.display = 'flex';
 }
 
-// ── DRAWING ──────────────────────────────────────────────────────────
-function onPointerDown(e) {
-  if (e.target !== previewImg && e.target !== selRect) return;
-  if (!previewImg.getBoundingClientRect().width) return;
+// ── Получение координат из touch/mouse ────────────────────────────────
+function getAreaPct(e) {
+  const r = area.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return {
+    x: Math.max(0, Math.min(1, (src.clientX - r.left) / r.width)),
+    y: Math.max(0, Math.min(1, (src.clientY - r.top)  / r.height)),
+  };
+}
+
+// ── Отрисовка рамки выделения ─────────────────────────────────────────
+function renderSelRect(a, b) {
+  if (!a || !b) { drawRect.style.display = 'none'; corners.forEach(c => c.style.display='none'); return; }
+  const r = area.getBoundingClientRect();
+  const x1 = Math.min(a.x, b.x) * r.width;
+  const y1 = Math.min(a.y, b.y) * r.height;
+  const x2 = Math.max(a.x, b.x) * r.width;
+  const y2 = Math.max(a.y, b.y) * r.height;
+
+  drawRect.setAttribute('x', x1);
+  drawRect.setAttribute('y', y1);
+  drawRect.setAttribute('width',  x2 - x1);
+  drawRect.setAttribute('height', y2 - y1);
+  drawRect.style.display = 'block';
+
+  const pts = [[x1,y1],[x2,y1],[x1,y2],[x2,y2]];
+  corners.forEach((c, i) => {
+    c.setAttribute('cx', pts[i][0]);
+    c.setAttribute('cy', pts[i][1]);
+    c.style.display = 'block';
+  });
+
+  coordsEl.style.display = 'block';
+  coordsEl.innerHTML =
+    `X: ${(Math.min(a.x,b.x)*100).toFixed(0)}%→${(Math.max(a.x,b.x)*100).toFixed(0)}%<br>` +
+    `Y: ${(Math.min(a.y,b.y)*100).toFixed(0)}%→${(Math.max(a.y,b.y)*100).toFixed(0)}%`;
+}
+
+// ── Touch/Mouse события на canvas-area ───────────────────────────────
+function onDown(e) {
+  // Игнорируем если нажали на timeline handle
+  if (e.target === tlHs || e.target === tlHe) return;
+  // Игнорируем если нажали на кнопки
+  if (e.target.closest('#bottom') || e.target.closest('#tl-section')) return;
+
   e.preventDefault();
+  e.stopPropagation();
+
   drawing = true;
-  startPt = getCanvasPct(e);
-  currentPt = {...startPt};
-  drawBadge.classList.add('visible');
-  zoneInfo.textContent = 'Рисую…';
+  p0 = getAreaPct(e);
+  p1 = {...p0};
+  drawBadge.classList.add('show');
+  hint.textContent = 'Рисую…';
 }
 
-function onPointerMove(e) {
+function onMove(e) {
   if (!drawing) return;
   e.preventDefault();
-  currentPt = getCanvasPct(e);
-  renderSelRect(startPt, currentPt);
-  updateCoordsOverlay(startPt, currentPt);
+  p1 = getAreaPct(e);
+  renderSelRect(p0, p1);
 }
 
-function onPointerUp(e) {
+function onUp(e) {
   if (!drawing) return;
   drawing = false;
-  drawBadge.classList.remove('visible');
-  zoneInfo.textContent = 'Рисуй область пальцем';
-  if (!startPt || !currentPt) return;
-  const dx = Math.abs(currentPt.x - startPt.x);
-  const dy = Math.abs(currentPt.y - startPt.y);
+  drawBadge.classList.remove('show');
+  hint.textContent = 'Рисуй пальцем область';
+
+  const dx = Math.abs((p1?.x||0) - (p0?.x||0));
+  const dy = Math.abs((p1?.y||0) - (p0?.y||0));
   if (dx < 0.02 || dy < 0.02) {
-    // too small — reset
-    selRect.style.display = 'none';
-    return;
+    renderSelRect(null, null);
+    coordsEl.style.display = 'none';
+    p0 = null; p1 = null;
   }
-  coordsOverlay.style.display = 'block';
-  btnAdd.style.animation = 'pulse 0.4s ease';
-  setTimeout(() => btnAdd.style.animation = '', 400);
 }
 
-function renderSelRect(a, b) {
-  if (!a || !b) return;
-  const rect = previewImg.getBoundingClientRect();
-  const wrapRect = canvasWrap.getBoundingClientRect();
-  const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x);
-  const y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
+// Регистрируем ТОЛЬКО на area, с capture=true чтобы перехватить до браузера
+area.addEventListener('touchstart', onDown, {passive: false, capture: true});
+area.addEventListener('touchmove',  onMove, {passive: false, capture: true});
+area.addEventListener('touchend',   onUp,   {passive: false, capture: true});
+area.addEventListener('mousedown',  onDown, {capture: true});
+window.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup',   onUp);
 
-  const sx = rect.left - wrapRect.left + x1 * rect.width;
-  const sy = rect.top  - wrapRect.top  + y1 * rect.height;
-  const sw = (x2 - x1) * rect.width;
-  const sh = (y2 - y1) * rect.height;
-
-  selRect.style.display = 'block';
-  selRect.style.left   = sx + 'px';
-  selRect.style.top    = sy + 'px';
-  selRect.style.width  = sw + 'px';
-  selRect.style.height = sh + 'px';
-}
-
-function updateCoordsOverlay(a, b) {
-  if (!a || !b) return;
-  const x1 = Math.min(a.x, b.x), x2 = Math.max(a.x, b.x);
-  const y1 = Math.min(a.y, b.y), y2 = Math.max(a.y, b.y);
-  coordsOverlay.style.display = 'block';
-  coordsOverlay.innerHTML =
-    `X: ${(x1*100).toFixed(0)}%→${(x2*100).toFixed(0)}%<br>` +
-    `Y: ${(y1*100).toFixed(0)}%→${(y2*100).toFixed(0)}%`;
-}
-
-previewImg.addEventListener('mousedown',  onPointerDown);
-previewImg.addEventListener('touchstart', onPointerDown, {passive:false});
-window.addEventListener('mousemove',  onPointerMove);
-window.addEventListener('touchmove',  onPointerMove, {passive:false});
-window.addEventListener('mouseup',    onPointerUp);
-window.addEventListener('touchend',   onPointerUp);
-
-// ── ADD REGION ───────────────────────────────────────────────────────
+// ── Добавить область ──────────────────────────────────────────────────
 btnAdd.addEventListener('click', () => {
-  if (!startPt || !currentPt) { toast('Сначала нарисуй область'); return; }
-  const x1 = Math.min(startPt.x, currentPt.x);
-  const x2 = Math.max(startPt.x, currentPt.x);
-  const y1 = Math.min(startPt.y, currentPt.y);
-  const y2 = Math.max(startPt.y, currentPt.y);
+  if (!p0 || !p1) { toast('Сначала нарисуй область'); return; }
+  const x1 = Math.min(p0.x, p1.x), x2 = Math.max(p0.x, p1.x);
+  const y1 = Math.min(p0.y, p1.y), y2 = Math.max(p0.y, p1.y);
   if ((x2-x1) < 0.02 || (y2-y1) < 0.02) { toast('Область слишком маленькая'); return; }
 
-  const color = COLORS[colorIdx % COLORS.length];
-  colorIdx++;
+  regions.push({
+    x1: +x1.toFixed(4), y1: +y1.toFixed(4),
+    x2: +x2.toFixed(4), y2: +y2.toFixed(4),
+    t0: +tlStart.toFixed(2), t1: +tlEnd.toFixed(2),
+    color: COLORS[colorIdx++ % COLORS.length],
+  });
 
-  regions.push({ x1, y1, x2, y2, t0: tlStart, t1: tlEnd, color });
-
-  selRect.style.display = 'none';
-  coordsOverlay.style.display = 'none';
-  startPt = null; currentPt = null;
-
+  renderSelRect(null, null);
+  coordsEl.style.display = 'none';
+  p0 = null; p1 = null;
   renderRegions();
   btnSend.disabled = false;
   toast('✓ Область добавлена');
 });
 
-// ── RESET ────────────────────────────────────────────────────────────
+// ── Сброс ─────────────────────────────────────────────────────────────
 btnReset.addEventListener('click', () => {
-  regions = [];
-  startPt = null; currentPt = null;
-  selRect.style.display = 'none';
-  coordsOverlay.style.display = 'none';
+  regions = []; p0 = null; p1 = null;
   tlStart = 0; tlEnd = duration;
-  updateTimelineUI();
+  renderSelRect(null, null);
+  coordsEl.style.display = 'none';
+  updateTlUI();
   renderRegions();
   btnSend.disabled = true;
   toast('Сброшено');
 });
 
-// ── RENDER REGIONS LIST ──────────────────────────────────────────────
+// ── Список областей ───────────────────────────────────────────────────
 function renderRegions() {
-  // Remove all rows
-  [...regionsWrap.querySelectorAll('.region-row')].forEach(r => r.remove());
-  if (!regions.length) {
-    regionsEmpty.style.display = 'block';
-    return;
-  }
-  regionsEmpty.style.display = 'none';
+  regBar.querySelectorAll('.rrow').forEach(r => r.remove());
+  if (!regions.length) { rempty.style.display = 'block'; return; }
+  rempty.style.display = 'none';
 
   regions.forEach((r, i) => {
+    const isAll = r.t0 <= 0.1 && r.t1 >= duration - 0.1;
+    const tStr = isAll ? 'весь ролик' : `${fmt(r.t0)}→${fmt(r.t1)}`;
     const row = document.createElement('div');
-    row.className = 'region-row';
-    const tDur = r.t1 >= duration - 0.1 && r.t0 <= 0.1 ? 'весь ролик' : `${fmt(r.t0)}→${fmt(r.t1)}`;
+    row.className = 'rrow';
     row.innerHTML = `
-      <div class="region-color" style="background:${r.color}"></div>
-      <div class="region-info">
+      <div class="rdot" style="background:${r.color}"></div>
+      <div class="rinfo">
         X:${(r.x1*100).toFixed(0)}–${(r.x2*100).toFixed(0)}%
-        &nbsp;Y:${(r.y1*100).toFixed(0)}–${(r.y2*100).toFixed(0)}%
+        Y:${(r.y1*100).toFixed(0)}–${(r.y2*100).toFixed(0)}%
+        <span class="rtime">${tStr}</span>
       </div>
-      <div class="region-time">${tDur}</div>
-      <button class="region-del" data-i="${i}" title="Удалить">✕</button>
+      <button class="rdel" data-i="${i}">✕</button>
     `;
-    regionsWrap.appendChild(row);
+    regBar.appendChild(row);
   });
 
-  regionsWrap.querySelectorAll('.region-del').forEach(btn => {
+  regBar.querySelectorAll('.rdel').forEach(btn => {
     btn.addEventListener('click', e => {
-      const idx = parseInt(e.target.dataset.i);
-      regions.splice(idx, 1);
+      regions.splice(+e.currentTarget.dataset.i, 1);
       if (!regions.length) btnSend.disabled = true;
       renderRegions();
       toast('Удалено');
@@ -750,96 +593,68 @@ function renderRegions() {
   });
 }
 
-// ── TIMELINE ─────────────────────────────────────────────────────────
-function updateTimelineUI() {
-  tlDur.textContent = fmt(duration);
-  const pStart = tlStart / duration;
-  const pEnd   = tlEnd   / duration;
-  tlRange.style.left  = (pStart * 100) + '%';
-  tlRange.style.right = ((1 - pEnd) * 100) + '%';
-  tlStartH.style.left  = (pStart * 100) + '%';
-  tlEndH.style.right   = ((1 - pEnd) * 100) + '%';
-
-  const t0Label = fmt(tlStart);
-  const t1Label = fmt(tlEnd);
-  tlT0.textContent = t0Label;
-  tlCur.textContent = `▶ ${t0Label} — ${t1Label}`;
+// ── Timeline ──────────────────────────────────────────────────────────
+function updateTlUI() {
+  const ps = tlStart / duration;
+  const pe = tlEnd   / duration;
+  tlFill.style.left  = (ps * 100) + '%';
+  tlFill.style.right = ((1 - pe) * 100) + '%';
+  tlHs.style.left  = (ps * 100) + '%';
+  tlHe.style.right = ((1 - pe) * 100) + '%';
+  tlS.textContent = fmt(tlStart);
+  tlD.textContent = fmt(duration);
+  const isAll = tlStart <= 0.1 && tlEnd >= duration - 0.1;
+  tlRlbl.textContent = isAll ? 'Весь ролик' : `▶ ${fmt(tlStart)} — ${fmt(tlEnd)}`;
 }
 
-function tlPointerPct(e) {
-  const rect = tlTrack.getBoundingClientRect();
-  const touch = e.touches ? e.touches[0] : e;
-  return Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+function tlPct(e) {
+  const r = tlTrack.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return Math.max(0, Math.min(1, (src.clientX - r.left) / r.width));
 }
 
-function startTlDrag(handle) {
-  return (e) => {
+function startTlDrag(which) {
+  return e => {
     e.stopPropagation();
     e.preventDefault();
-    draggingHandle = handle;
+    draggingTl = which;
   };
 }
 
-tlStartH.addEventListener('mousedown',  startTlDrag('start'));
-tlStartH.addEventListener('touchstart', startTlDrag('start'), {passive:false});
-tlEndH.addEventListener('mousedown',    startTlDrag('end'));
-tlEndH.addEventListener('touchstart',   startTlDrag('end'),   {passive:false});
+tlHs.addEventListener('touchstart', startTlDrag('start'), {passive: false});
+tlHe.addEventListener('touchstart', startTlDrag('end'),   {passive: false});
+tlHs.addEventListener('mousedown',  startTlDrag('start'));
+tlHe.addEventListener('mousedown',  startTlDrag('end'));
 
-window.addEventListener('mousemove', e => {
-  if (!draggingHandle) return;
-  const p = tlPointerPct(e);
-  if (draggingHandle === 'start') tlStart = Math.min(p * duration, tlEnd - 1);
-  else                            tlEnd   = Math.max(p * duration, tlStart + 1);
-  tlStart = Math.max(0, tlStart);
-  tlEnd   = Math.min(duration, tlEnd);
-  updateTimelineUI();
-});
-window.addEventListener('touchmove', e => {
-  if (!draggingHandle) return;
+function moveTl(e) {
+  if (!draggingTl) return;
   e.preventDefault();
-  const p = tlPointerPct(e);
-  if (draggingHandle === 'start') tlStart = Math.min(p * duration, tlEnd - 1);
-  else                            tlEnd   = Math.max(p * duration, tlStart + 1);
-  tlStart = Math.max(0, tlStart);
-  tlEnd   = Math.min(duration, tlEnd);
-  updateTimelineUI();
-}, {passive:false});
-window.addEventListener('mouseup',  () => { draggingHandle = null; });
-window.addEventListener('touchend', () => { draggingHandle = null; });
+  const p = tlPct(e) * duration;
+  if (draggingTl === 'start') tlStart = Math.max(0, Math.min(p, tlEnd - 1));
+  else                         tlEnd   = Math.min(duration, Math.max(p, tlStart + 1));
+  updateTlUI();
+}
+window.addEventListener('touchmove', moveTl, {passive: false});
+window.addEventListener('mousemove', moveTl);
+window.addEventListener('touchend',  () => { draggingTl = null; });
+window.addEventListener('mouseup',   () => { draggingTl = null; });
 
-// ── SEND ─────────────────────────────────────────────────────────────
+// ── Отправка ──────────────────────────────────────────────────────────
 btnSend.addEventListener('click', () => {
   if (!regions.length) return;
-
-  const payload = {
-    regions: regions.map(r => ({
-      x1: +r.x1.toFixed(4),
-      y1: +r.y1.toFixed(4),
-      x2: +r.x2.toFixed(4),
-      y2: +r.y2.toFixed(4),
-      t0: +r.t0.toFixed(2),
-      t1: +r.t1.toFixed(2),
-    }))
-  };
-
+  const payload = JSON.stringify({
+    regions: regions.map(({x1,y1,x2,y2,t0,t1}) => ({x1,y1,x2,y2,t0,t1}))
+  });
   if (tg) {
-    tg.sendData(JSON.stringify(payload));
+    tg.sendData(payload);
   } else {
-    // fallback for browser testing
-    alert('Payload:\n' + JSON.stringify(payload, null, 2));
+    alert('Payload:\n' + payload);
   }
 });
 
-// ── INIT ─────────────────────────────────────────────────────────────
-updateTimelineUI();
+// ── Init ─────────────────────────────────────────────────────────────
+updateTlUI();
 renderRegions();
-if (!imgSrc) {
-  setTimeout(() => {
-    loading.classList.add('hidden');
-    noImg.style.display = 'none';
-    previewImg.style.display = 'block';
-  }, 1000);
-}
 </script>
 </body>
 </html>
