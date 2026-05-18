@@ -6,435 +6,733 @@
 <title>Blur Editor</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0d0d14; --surface: #13131f; --surface2: #1c1c2e;
-    --accent: #7c5cfc; --accent2: #fc5c7d;
-    --text: #e2e2f0; --muted: #55556e; --border: #252538;
-  }
-  html, body {
-    height: 100%; width: 100%;
-    background: var(--bg); color: var(--text);
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    overflow: hidden; touch-action: none;
-    -webkit-user-select: none; user-select: none;
-  }
-  #app { display: flex; flex-direction: column; height: 100dvh; width: 100%; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d0d14; --surface: #13131f; --surface2: #1c1c2e;
+  --accent: #7c5cfc; --danger: #fc5c7d;
+  --text: #e2e2f0; --muted: #55556e; --border: #252538;
+}
+html, body {
+  height: 100%; width: 100%;
+  background: var(--bg); color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  overflow: hidden; touch-action: none;
+  -webkit-user-select: none; user-select: none;
+}
+#app { display: flex; flex-direction: column; height: 100dvh; width: 100%; }
 
-  #header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 14px; background: var(--surface);
-    border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 42px;
-  }
-  #header h1 { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
-  #hint { font-size: 10px; color: var(--muted); max-width: 55%; text-align: right; }
+/* Header */
+#header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; background: var(--surface);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+#header h1 { font-size: 13px; font-weight: 700; color: var(--accent); }
+#hint { font-size: 10px; color: var(--muted); }
 
-  #canvas-area {
-    flex: 1; position: relative; background: #000; overflow: hidden;
-    touch-action: none; cursor: crosshair;
-  }
-  #canvas-area canvas {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%; touch-action: none;
-  }
-  #overlay-svg {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; overflow: visible;
-  }
-  #draw-rect { fill: rgba(124,92,252,0.2); stroke: #7c5cfc; stroke-width: 2.5; stroke-dasharray: none; display: none; }
-  .cdot { fill: #7c5cfc; display: none; }
+/* Canvas */
+#canvas-wrap {
+  flex: 1; position: relative; background: #000; overflow: hidden;
+  touch-action: none; cursor: crosshair; min-height: 0;
+}
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
-  #draw-badge {
-    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-    background: rgba(124,92,252,.92); color: #fff; font-size: 11px;
-    padding: 5px 16px; border-radius: 14px; pointer-events: none;
-    opacity: 0; transition: opacity .18s; white-space: nowrap;
-  }
-  #draw-badge.show { opacity: 1; }
+/* SVG overlay for drawing */
+#ov {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; overflow: visible;
+}
+.rbox { fill: none; stroke-width: 2.5; opacity: 0.85; }
+.rbox-fill { opacity: 0.15; stroke: none; }
+.rlabel {
+  font-size: 11px; font-weight: 600; fill: #fff;
+  text-shadow: 0 1px 3px #000; pointer-events: none;
+  font-family: system-ui, sans-serif;
+}
+#draw-rect { fill: rgba(124,92,252,.18); stroke: #7c5cfc; stroke-width: 2.5; display: none; }
+.handle { fill: #7c5cfc; display: none; r: 5; }
 
-  #coords {
-    position: absolute; top: 8px; left: 8px;
-    background: rgba(13,13,20,.88); border: 1px solid var(--border);
-    padding: 4px 8px; font-size: 10px; color: var(--accent);
-    border-radius: 4px; display: none; line-height: 1.75; pointer-events: none;
-  }
+#badge {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(124,92,252,.92); color: #fff; font-size: 11px;
+  padding: 5px 16px; border-radius: 14px; pointer-events: none;
+  opacity: 0; transition: opacity .15s; white-space: nowrap;
+}
+#badge.on { opacity: 1; }
 
-  #no-img {
-    position: absolute; inset: 0; display: none;
-    flex-direction: column; align-items: center; justify-content: center;
-    gap: 10px; color: var(--muted); font-size: 11px; text-align: center; padding: 24px;
-  }
-  #no-img svg { opacity: .2; margin-bottom: 4px; }
+/* No-image placeholder */
+#no-img {
+  position: absolute; inset: 0; display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; color: var(--muted); font-size: 11px; text-align: center; padding: 24px;
+}
 
-  #loading {
-    position: absolute; inset: 0; background: var(--bg);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px; z-index: 50;
-  }
-  #loading.hidden { display: none; }
-  .spinner {
-    width: 32px; height: 32px; border: 3px solid var(--border);
-    border-top-color: var(--accent); border-radius: 50%;
-    animation: spin .75s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .load-txt { font-size: 10px; color: var(--muted); letter-spacing: .09em; text-transform: uppercase; }
+/* Loading */
+#loading {
+  position: absolute; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; z-index: 50;
+}
+#loading.off { display: none; }
+.spin {
+  width: 32px; height: 32px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .75s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-  #regions-bar {
-    background: var(--surface); border-top: 1px solid var(--border);
-    max-height: 90px; overflow-y: auto; flex-shrink: 0;
-    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
-  }
-  .rrow {
-    display: flex; align-items: center; padding: 5px 12px;
-    border-bottom: 1px solid var(--border); gap: 7px; font-size: 10px;
-  }
-  .rdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .rinfo { flex: 1; color: var(--text); }
-  .rtime { color: var(--accent); }
-  .rdel { background: none; border: none; color: var(--accent2); font-size: 15px; cursor: pointer; padding: 0 3px; }
-  .rempty { text-align: center; color: var(--muted); font-size: 10px; padding: 12px; }
+/* Scrubber timeline (shows frame at current time) */
+#scrubber-section {
+  background: var(--surface2); border-top: 1px solid var(--border);
+  padding: 7px 14px 5px; flex-shrink: 0;
+}
+.sec-lbl { font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 4px; }
+#scrub-track {
+  position: relative; height: 28px;
+  background: var(--bg); border-radius: 6px; border: 1px solid var(--border);
+  touch-action: none;
+}
+#scrub-prog {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  background: rgba(124,92,252,.25); border-radius: 5px 0 0 5px; pointer-events: none;
+}
+#scrub-head {
+  position: absolute; top: 50%; width: 18px; height: 30px;
+  background: var(--accent); border-radius: 4px;
+  transform: translate(-50%,-50%); cursor: ew-resize; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(124,92,252,.45); z-index: 5;
+}
+#scrub-head::before {
+  content: ''; width: 2px; height: 9px; background: rgba(255,255,255,.5);
+  border-radius: 1px; box-shadow: 3px 0 0 rgba(255,255,255,.4), -3px 0 0 rgba(255,255,255,.4);
+}
+#scrub-info { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9px; color: var(--muted); }
+#scrub-now { color: var(--accent); }
 
-  #tl-section {
-    background: var(--surface2); border-top: 1px solid var(--border);
-    padding: 8px 14px 6px; flex-shrink: 0;
-  }
-  .tl-lbl { font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; }
-  #tl-track {
-    position: relative; height: 24px; background: var(--bg);
-    border-radius: 6px; border: 1px solid var(--border);
-  }
-  #tl-fill {
-    position: absolute; top: 0; bottom: 0;
-    background: rgba(124,92,252,.22);
-    border-left: 3px solid var(--accent); border-right: 3px solid var(--accent);
-    pointer-events: none;
-  }
-  .tl-h {
-    position: absolute; top: 50%; width: 16px; height: 28px;
-    background: var(--accent); border-radius: 4px;
-    cursor: ew-resize; touch-action: none;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(124,92,252,.45); z-index: 5;
-  }
-  .tl-h::before {
-    content: ''; width: 2px; height: 9px; background: rgba(255,255,255,.5);
-    border-radius: 1px; box-shadow: 3px 0 0 rgba(255,255,255,.4),-3px 0 0 rgba(255,255,255,.4);
-  }
-  #tl-hs { transform: translate(-50%,-50%); }
-  #tl-he { transform: translate(50%,-50%); }
-  #tl-info { display:flex; justify-content:space-between; margin-top:4px; font-size:9px; color:var(--muted); }
-  #tl-lbl2 { text-align:center; font-size:10px; color:var(--accent); margin-top:2px; }
+/* Blur range section */
+#range-section {
+  background: var(--surface2); border-top: 1px solid var(--border);
+  padding: 6px 14px 5px; flex-shrink: 0;
+}
+#tl-track {
+  position: relative; height: 22px;
+  background: var(--bg); border-radius: 5px; border: 1px solid var(--border);
+  touch-action: none;
+}
+#tl-fill {
+  position: absolute; top: 0; bottom: 0;
+  background: rgba(252,92,125,.22);
+  border-left: 3px solid var(--danger); border-right: 3px solid var(--danger);
+  pointer-events: none;
+}
+.tl-h {
+  position: absolute; top: 50%; width: 14px; height: 26px;
+  background: var(--danger); border-radius: 4px;
+  cursor: ew-resize; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(252,92,125,.45); z-index: 5;
+}
+.tl-h::before {
+  content: ''; width: 2px; height: 8px; background: rgba(255,255,255,.5);
+  border-radius: 1px; box-shadow: 3px 0 0 rgba(255,255,255,.35), -3px 0 0 rgba(255,255,255,.35);
+}
+#tl-hs { transform: translate(-50%,-50%); }
+#tl-he { transform: translate(50%,-50%); }
+#tl-info { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9px; color: var(--muted); }
+#tl-range { color: var(--danger); text-align: center; font-size: 9px; margin-top: 2px; }
 
-  #bottom {
-    display: flex; gap: 8px; padding: 8px 14px;
-    background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
-  }
-  .btn {
-    flex: 1; padding: 10px 6px; border: none; border-radius: 8px;
-    font-family: inherit; font-size: 11px; font-weight: 600;
-    letter-spacing: .04em; text-transform: uppercase; cursor: pointer; transition: transform .1s;
-  }
-  .btn:active { transform: scale(.96); }
-  .btn-sec { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
-  .btn-add { background: transparent; color: var(--accent); border: 1px solid var(--accent); flex: 0 0 auto; padding: 10px 14px; }
-  .btn-pri { background: var(--accent); color: #fff; box-shadow: 0 3px 12px rgba(124,92,252,.35); }
-  .btn-pri:disabled { background: var(--border); color: var(--muted); box-shadow: none; cursor: not-allowed; }
+/* Regions bar */
+#regions-bar {
+  background: var(--surface); border-top: 1px solid var(--border);
+  max-height: 80px; overflow-y: auto; flex-shrink: 0;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.rrow {
+  display: flex; align-items: center; padding: 5px 12px;
+  border-bottom: 1px solid var(--border); gap: 7px; font-size: 10px;
+}
+.rdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rinfo { flex: 1; color: var(--text); }
+.rtime { color: var(--accent); }
+.rdel { background: none; border: none; color: var(--danger); font-size: 15px; cursor: pointer; padding: 0 3px; }
+.rempty { text-align: center; color: var(--muted); font-size: 10px; padding: 10px; }
 
-  #toast {
-    position: fixed; bottom: 76px; left: 50%;
-    transform: translateX(-50%) translateY(14px);
-    background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text); font-size: 11px; padding: 7px 16px;
-    border-radius: 20px; opacity: 0; transition: all .2s;
-    pointer-events: none; white-space: nowrap; z-index: 999;
-  }
-  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* Bottom bar */
+#bottom {
+  display: flex; gap: 8px; padding: 8px 14px;
+  background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.btn {
+  flex: 1; padding: 10px 6px; border: none; border-radius: 8px;
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; cursor: pointer; transition: transform .1s;
+}
+.btn:active { transform: scale(.96); }
+.btn-sec { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+.btn-add { background: transparent; color: var(--accent); border: 1px solid var(--accent); flex: 0 0 auto; padding: 10px 14px; }
+.btn-pri { background: var(--accent); color: #fff; }
+.btn-pri:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+/* Debug */
+#dbg {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,.9); color: #0f0; font-size: 9px;
+  padding: 4px 8px; max-height: 60px; overflow-y: auto;
+  z-index: 999; display: none; white-space: pre-wrap;
+  font-family: monospace;
+}
 </style>
 </head>
 <body>
 <div id="app">
   <div id="header">
     <h1>🎯 Blur Editor</h1>
-    <span id="hint">Рисуй пальцем</span>
+    <span id="hint">Рисуй пальцем на видео</span>
   </div>
 
-  <div id="canvas-area">
+  <div id="canvas-wrap">
     <canvas id="cv"></canvas>
-    <svg id="overlay-svg" xmlns="http://www.w3.org/2000/svg">
+    <svg id="ov" xmlns="http://www.w3.org/2000/svg">
       <rect id="draw-rect" rx="3"/>
-      <circle class="cdot" id="c-tl" r="5"/>
-      <circle class="cdot" id="c-tr" r="5"/>
-      <circle class="cdot" id="c-bl" r="5"/>
-      <circle class="cdot" id="c-br" r="5"/>
+      <circle class="handle" id="h-tl"/><circle class="handle" id="h-tr"/>
+      <circle class="handle" id="h-bl"/><circle class="handle" id="h-br"/>
     </svg>
-    <div id="draw-badge">✏️ РИСУЮ</div>
-    <div id="coords"></div>
-    <div id="no-img">
-      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <circle cx="8.5" cy="8.5" r="1.5"/>
-        <polyline points="21 15 16 10 5 21"/>
-      </svg>
-      <span>Превью недоступно.<br>Рисуй область как будто видео здесь.</span>
+    <div id="badge">✏️ РИСУЮ</div>
+    <div id="no-img" style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px;">
+      <span style="font-size:28px; opacity:.3">🎬</span>
+      <span>Превью не загружено.<br>Рисуй область — блюр всё равно применится.</span>
     </div>
     <div id="loading">
-      <div class="spinner"></div>
-      <div class="load-txt">Загружаю превью</div>
+      <div class="spin"></div>
+      <div style="font-size:10px; color:var(--muted); letter-spacing:.09em; text-transform:uppercase;">Загружаю превью</div>
     </div>
   </div>
 
-  <div id="regions-bar">
-    <div class="rempty" id="rempty">Нет выделенных областей</div>
+  <!-- Scrubber: смотрим разные кадры видео -->
+  <div id="scrubber-section">
+    <div class="sec-lbl">Просмотр кадра (перемотка)</div>
+    <div id="scrub-track">
+      <div id="scrub-prog"></div>
+      <div id="scrub-head"></div>
+    </div>
+    <div id="scrub-info">
+      <span id="scrub-now">0:00</span>
+      <span>◀ тащи чтобы смотреть кадры ▶</span>
+      <span id="scrub-end">0:00</span>
+    </div>
   </div>
 
-  <div id="tl-section">
-    <div class="tl-lbl">Временной диапазон блюра</div>
+  <!-- Range: задаём временной диапазон блюра -->
+  <div id="range-section">
+    <div class="sec-lbl">Диапазон блюра (когда применять)</div>
     <div id="tl-track">
       <div id="tl-fill"></div>
       <div class="tl-h" id="tl-hs"></div>
       <div class="tl-h" id="tl-he"></div>
     </div>
-    <div id="tl-info"><span id="tl-s">0:00</span><span id="tl-d">0:00</span></div>
-    <div id="tl-lbl2">Весь ролик</div>
+    <div id="tl-info">
+      <span id="tl-s">0:00</span>
+      <span id="tl-d">0:00</span>
+    </div>
+    <div id="tl-range">Весь ролик</div>
+  </div>
+
+  <!-- Regions list -->
+  <div id="regions-bar">
+    <div class="rempty" id="rempty">Нет выделенных областей</div>
   </div>
 
   <div id="bottom">
-    <button class="btn btn-sec" id="btn-reset">Сброс</button>
+    <button class="btn btn-sec" id="btn-rst">Сброс</button>
     <button class="btn btn-add" id="btn-add">+ Добавить</button>
     <button class="btn btn-pri" id="btn-send" disabled>Применить</button>
   </div>
 </div>
-<div id="toast"></div>
+
+<div id="dbg"></div>
 
 <script>
+// ── Telegram WebApp init ───────────────────────────────────────────────────
 const tg = window.Telegram?.WebApp;
-if (tg) { tg.ready(); tg.expand(); }
+let dbgMode = false;
 
-// ── Параметры ─────────────────────────────────────────────────────────
-// Превью приходит в hash: #img=BASE64
-// Длительность в query: ?dur=30
-const params   = new URLSearchParams(location.search);
-const duration = Math.max(1, parseFloat(params.get('dur') || '30'));
-
-// Читаем hash
-function getHashParam(key) {
-  const hash = location.hash.slice(1); // убираем #
-  const p = new URLSearchParams(hash);
-  return p.get(key) || '';
+function log(msg) {
+  if (!dbgMode) return;
+  const el = document.getElementById('dbg');
+  el.style.display = 'block';
+  el.textContent += msg + '\n';
 }
-const imgB64 = getHashParam('img');
 
-// ── Состояние ─────────────────────────────────────────────────────────
-let regions = [], tlStart = 0, tlEnd = duration;
-let draggingTl = null, drawing = false, p0 = null, p1 = null;
+try {
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    log('TG ready, version=' + tg.version + ' platform=' + tg.platform);
+  } else {
+    log('No TG WebApp — debug mode');
+    dbgMode = true;
+    document.getElementById('dbg').style.display = 'block';
+  }
+} catch(e) { log('TG init error: ' + e); }
+
+// ── Parse URL params & hash ────────────────────────────────────────────────
+const params = new URLSearchParams(location.search);
+const duration = Math.max(1, parseFloat(params.get('dur') || '30'));
+dbgMode = dbgMode || params.get('debug') === '1';
+
+// Multiple frames from hash: #f0=BASE64&f1=BASE64&t0=0&t1=5&t2=...
+// OR legacy: #img=BASE64
+function parseHash() {
+  const hash = location.hash.slice(1);
+  const p = new URLSearchParams(hash);
+  const frames = [];
+  // Try multi-frame format: f0, f1, f2...
+  let i = 0;
+  while (true) {
+    const b = p.get('f' + i);
+    if (!b) break;
+    const t = parseFloat(p.get('t' + i) || '0');
+    frames.push({ b64: decodeURIComponent(b), time: t });
+    i++;
+  }
+  // Legacy single frame
+  if (!frames.length) {
+    const b = p.get('img');
+    if (b) frames.push({ b64: decodeURIComponent(b), time: duration * 0.25 });
+  }
+  return frames;
+}
+
+const frameData = parseHash();
+log('Frames in hash: ' + frameData.length + ', duration=' + duration);
+
+// ── State ──────────────────────────────────────────────────────────────────
+let regions = [];
+let tlStart = 0, tlEnd = duration;
+let scrubTime = 0;
+let drawing = false, p0 = null, p1 = null;
+let draggingTl = null, draggingScrub = false;
 const COLORS = ['#7c5cfc','#fc5c7d','#5cf8ca','#f8d95c','#fc955c','#5ca8fc'];
 let colorIdx = 0;
 
-// ── DOM ───────────────────────────────────────────────────────────────
-const area    = document.getElementById('canvas-area');
+// Loaded image elements indexed by position in frameData
+const loadedImgs = [];
+let imgsLoaded = 0;
+
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const wrap    = document.getElementById('canvas-wrap');
 const cv      = document.getElementById('cv');
 const ctx     = cv.getContext('2d');
+const ov      = document.getElementById('ov');
 const drect   = document.getElementById('draw-rect');
-const cdots   = ['c-tl','c-tr','c-bl','c-br'].map(id => document.getElementById(id));
-const badge   = document.getElementById('draw-badge');
-const cords   = document.getElementById('coords');
+const handles = ['h-tl','h-tr','h-bl','h-br'].map(id => document.getElementById(id));
+const badge   = document.getElementById('badge');
+const noImg   = document.getElementById('no-img');
+const loading = document.getElementById('loading');
+const hintEl  = document.getElementById('hint');
 const regBar  = document.getElementById('regions-bar');
 const rempty  = document.getElementById('rempty');
+const btnAdd  = document.getElementById('btn-add');
+const btnRst  = document.getElementById('btn-rst');
+const btnSend = document.getElementById('btn-send');
+
+const scrubTrack = document.getElementById('scrub-track');
+const scrubProg  = document.getElementById('scrub-prog');
+const scrubHead  = document.getElementById('scrub-head');
+const scrubNow   = document.getElementById('scrub-now');
+const scrubEnd   = document.getElementById('scrub-end');
+
 const tlTrack = document.getElementById('tl-track');
 const tlFill  = document.getElementById('tl-fill');
 const tlHs    = document.getElementById('tl-hs');
 const tlHe    = document.getElementById('tl-he');
 const tlS     = document.getElementById('tl-s');
 const tlD     = document.getElementById('tl-d');
-const tl2     = document.getElementById('tl-lbl2');
-const btnAdd  = document.getElementById('btn-add');
-const btnRst  = document.getElementById('btn-reset');
-const btnSend = document.getElementById('btn-send');
-const loading = document.getElementById('loading');
-const noImg   = document.getElementById('no-img');
-const hint    = document.getElementById('hint');
+const tlRange = document.getElementById('tl-range');
 
-const fmt = s => `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;
-function toast(msg, ms=1800) {
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.classList.add('show');
-  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),ms);
+const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+
+// ── Canvas resize & draw ───────────────────────────────────────────────────
+new ResizeObserver(() => { resizeCanvas(); redraw(); }).observe(wrap);
+
+function resizeCanvas() {
+  cv.width  = wrap.clientWidth;
+  cv.height = wrap.clientHeight;
 }
 
-// ── Canvas ────────────────────────────────────────────────────────────
-let imgEl = null;
-new ResizeObserver(()=>{ cv.width=area.clientWidth; cv.height=area.clientHeight; redraw(); }).observe(area);
+function getFrameForTime(t) {
+  if (!loadedImgs.length) return null;
+  if (loadedImgs.length === 1) return loadedImgs[0];
+  // Find closest frame by time
+  let best = loadedImgs[0], bestDist = Infinity;
+  for (const f of loadedImgs) {
+    if (!f.img) continue;
+    const d = Math.abs(f.time - t);
+    if (d < bestDist) { bestDist = d; best = f; }
+  }
+  return best;
+}
 
 function redraw() {
-  ctx.clearRect(0,0,cv.width,cv.height);
-  if (!imgEl) return;
-  const iw=imgEl.naturalWidth, ih=imgEl.naturalHeight;
-  const cw=cv.width, ch=cv.height;
-  const sc=Math.min(cw/iw, ch/ih);
-  ctx.drawImage(imgEl,(cw-iw*sc)/2,(ch-ih*sc)/2,iw*sc,ih*sc);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const frame = getFrameForTime(scrubTime);
+  if (!frame || !frame.img) return;
+  const iw = frame.img.naturalWidth, ih = frame.img.naturalHeight;
+  const cw = cv.width, ch = cv.height;
+  const sc = Math.min(cw / iw, ch / ih);
+  const ox = (cw - iw * sc) / 2, oy = (ch - ih * sc) / 2;
+  ctx.drawImage(frame.img, ox, oy, iw * sc, ih * sc);
+  // Draw committed regions
+  drawRegionsOnCanvas(ox, oy, iw * sc, ih * sc);
 }
 
-// ── Загрузка превью из base64 ─────────────────────────────────────────
-if (imgB64) {
-  const src = 'data:image/jpeg;base64,' + decodeURIComponent(imgB64);
-  const i = new Image();
-  i.onload = () => {
-    imgEl = i;
-    loading.classList.add('hidden');
-    noImg.style.display = 'none';
-    redraw();
-  };
-  i.onerror = () => {
-    loading.classList.add('hidden');
+function drawRegionsOnCanvas(ox, oy, iw, ih) {
+  // Draw onto SVG overlay instead (cleaner)
+  updateRegionOverlay();
+}
+
+// ── Load frames ────────────────────────────────────────────────────────────
+function loadFrames() {
+  if (!frameData.length) {
+    loading.classList.add('off');
     noImg.style.display = 'flex';
-  };
-  i.src = src;
-} else {
-  loading.classList.add('hidden');
-  noImg.style.display = 'flex';
+    return;
+  }
+  for (const fd of frameData) {
+    const entry = { img: null, time: fd.time };
+    loadedImgs.push(entry);
+    const img = new Image();
+    img.onload = () => {
+      entry.img = img;
+      imgsLoaded++;
+      log('Frame loaded t=' + fd.time + ' (' + imgsLoaded + '/' + frameData.length + ')');
+      if (imgsLoaded === 1) {
+        loading.classList.add('off');
+        noImg.style.display = 'none';
+        resizeCanvas();
+        redraw();
+      } else {
+        redraw();
+      }
+    };
+    img.onerror = () => {
+      imgsLoaded++;
+      log('Frame load error t=' + fd.time);
+      if (imgsLoaded === frameData.length && !loadedImgs.some(f => f.img)) {
+        loading.classList.add('off');
+        noImg.style.display = 'flex';
+      }
+    };
+    img.src = 'data:image/jpeg;base64,' + fd.b64;
+  }
+}
+loadFrames();
+
+// ── Scrubber ───────────────────────────────────────────────────────────────
+scrubEnd.textContent = fmt(duration);
+
+function updateScrubUI() {
+  const pct = duration > 0 ? scrubTime / duration : 0;
+  scrubProg.style.width = (pct * 100) + '%';
+  scrubHead.style.left  = (pct * 100) + '%';
+  scrubNow.textContent  = fmt(scrubTime);
 }
 
-// ── Координаты ────────────────────────────────────────────────────────
-function getPct(e) {
-  const r=area.getBoundingClientRect(), s=e.touches?e.touches[0]:e;
-  return { x:Math.max(0,Math.min(1,(s.clientX-r.left)/r.width)),
-           y:Math.max(0,Math.min(1,(s.clientY-r.top)/r.height)) };
+function scrubPct(e) {
+  const r = scrubTrack.getBoundingClientRect();
+  const s = e.touches ? e.touches[0] : e;
+  return Math.max(0, Math.min(1, (s.clientX - r.left) / r.width));
 }
 
-// ── Рамка ─────────────────────────────────────────────────────────────
-function renderSel(a,b) {
-  if (!a||!b) { drect.style.display='none'; cdots.forEach(c=>c.style.display='none'); return; }
-  const r=area.getBoundingClientRect();
-  const x1=Math.min(a.x,b.x)*r.width, y1=Math.min(a.y,b.y)*r.height;
-  const x2=Math.max(a.x,b.x)*r.width, y2=Math.max(a.y,b.y)*r.height;
-  drect.setAttribute('x',x1); drect.setAttribute('y',y1);
-  drect.setAttribute('width',x2-x1); drect.setAttribute('height',y2-y1);
-  drect.style.display='block';
-  [[x1,y1],[x2,y1],[x1,y2],[x2,y2]].forEach(([cx,cy],i)=>{
-    cdots[i].setAttribute('cx',cx); cdots[i].setAttribute('cy',cy); cdots[i].style.display='block';
-  });
-  cords.style.display='block';
-  cords.innerHTML=
-    `X:${(Math.min(a.x,b.x)*100).toFixed(0)}–${(Math.max(a.x,b.x)*100).toFixed(0)}% `+
-    `Y:${(Math.min(a.y,b.y)*100).toFixed(0)}–${(Math.max(a.y,b.y)*100).toFixed(0)}%`;
-}
-
-// ── Touch/Mouse ───────────────────────────────────────────────────────
-function onDown(e) {
-  if (e.target===tlHs||e.target===tlHe) return;
-  if (e.target.closest&&(e.target.closest('#bottom')||e.target.closest('#tl-section'))) return;
+function startScrub(e) {
+  if (e.target.closest('#tl-track')) return;
+  draggingScrub = true;
   e.preventDefault(); e.stopPropagation();
-  drawing=true; p0=getPct(e); p1={...p0};
-  badge.classList.add('show'); hint.textContent='Рисую…';
+  scrubTime = scrubPct(e) * duration;
+  updateScrubUI(); redraw();
+}
+function moveScrub(e) {
+  if (!draggingScrub) return;
+  e.preventDefault();
+  scrubTime = scrubPct(e) * duration;
+  updateScrubUI(); redraw();
+}
+function endScrub() { draggingScrub = false; }
+
+scrubTrack.addEventListener('touchstart', startScrub, { passive: false });
+scrubTrack.addEventListener('mousedown',  startScrub);
+window.addEventListener('touchmove',  e => { if (draggingScrub) moveScrub(e); }, { passive: false });
+window.addEventListener('mousemove',  e => { if (draggingScrub) moveScrub(e); });
+window.addEventListener('touchend',   endScrub);
+window.addEventListener('mouseup',    endScrub);
+
+updateScrubUI();
+
+// ── Blur range (tl) ───────────────────────────────────────────────────────
+function updateTl() {
+  const ps = tlStart / duration, pe = tlEnd / duration;
+  tlFill.style.left  = (ps * 100) + '%';
+  tlFill.style.right = ((1 - pe) * 100) + '%';
+  tlHs.style.left    = (ps * 100) + '%';
+  tlHe.style.right   = ((1 - pe) * 100) + '%';
+  tlS.textContent = fmt(tlStart);
+  tlD.textContent = fmt(duration);
+  const isAll = tlStart <= 0.1 && tlEnd >= duration - 0.1;
+  tlRange.textContent = isAll ? 'Весь ролик' : `▶ ${fmt(tlStart)} — ${fmt(tlEnd)}`;
+}
+
+function tlPct(e) {
+  const r = tlTrack.getBoundingClientRect();
+  const s = e.touches ? e.touches[0] : e;
+  return Math.max(0, Math.min(1, (s.clientX - r.left) / r.width));
+}
+
+const startTl = which => e => {
+  e.stopPropagation(); e.preventDefault();
+  draggingTl = which;
+};
+tlHs.addEventListener('touchstart', startTl('s'), { passive: false });
+tlHe.addEventListener('touchstart', startTl('e'), { passive: false });
+tlHs.addEventListener('mousedown',  startTl('s'));
+tlHe.addEventListener('mousedown',  startTl('e'));
+
+function moveTl(e) {
+  if (!draggingTl) return;
+  e.preventDefault();
+  const p = tlPct(e) * duration;
+  if (draggingTl === 's') tlStart = Math.max(0, Math.min(p, tlEnd - 0.5));
+  else                     tlEnd   = Math.min(duration, Math.max(p, tlStart + 0.5));
+  updateTl();
+}
+window.addEventListener('touchmove', moveTl, { passive: false });
+window.addEventListener('mousemove', moveTl);
+window.addEventListener('touchend',  () => { draggingTl = null; });
+window.addEventListener('mouseup',   () => { draggingTl = null; });
+
+updateTl();
+
+// ── Drawing on canvas ──────────────────────────────────────────────────────
+function getPos(e) {
+  const r = wrap.getBoundingClientRect();
+  const s = e.touches ? e.touches[0] : e;
+  return {
+    x: Math.max(0, Math.min(1, (s.clientX - r.left) / r.width)),
+    y: Math.max(0, Math.min(1, (s.clientY - r.top)  / r.height))
+  };
+}
+
+function showDrawRect(a, b) {
+  if (!a || !b) {
+    drect.style.display = 'none';
+    handles.forEach(h => h.style.display = 'none');
+    return;
+  }
+  const r = wrap.getBoundingClientRect();
+  const x1 = Math.min(a.x, b.x) * r.width;
+  const y1 = Math.min(a.y, b.y) * r.height;
+  const x2 = Math.max(a.x, b.x) * r.width;
+  const y2 = Math.max(a.y, b.y) * r.height;
+  drect.setAttribute('x', x1); drect.setAttribute('y', y1);
+  drect.setAttribute('width', x2 - x1); drect.setAttribute('height', y2 - y1);
+  drect.style.display = 'block';
+  [[x1,y1],[x2,y1],[x1,y2],[x2,y2]].forEach(([cx,cy], i) => {
+    handles[i].setAttribute('cx', cx); handles[i].setAttribute('cy', cy);
+    handles[i].style.display = 'block';
+  });
+}
+
+function onDown(e) {
+  if (e.target === tlHs || e.target === tlHe) return;
+  if (e.target.closest && (
+    e.target.closest('#bottom') ||
+    e.target.closest('#tl-track') ||
+    e.target.closest('#range-section') ||
+    e.target.closest('#scrubber-section') ||
+    e.target.closest('#regions-bar')
+  )) return;
+  e.preventDefault(); e.stopPropagation();
+  drawing = true; p0 = getPos(e); p1 = { ...p0 };
+  badge.classList.add('on');
+  hintEl.textContent = 'Рисую…';
 }
 function onMove(e) {
-  if (!drawing) return; e.preventDefault(); p1=getPct(e); renderSel(p0,p1);
+  if (!drawing) return;
+  e.preventDefault();
+  p1 = getPos(e);
+  showDrawRect(p0, p1);
 }
 function onUp() {
-  if (!drawing) return; drawing=false;
-  badge.classList.remove('show'); hint.textContent='Рисуй пальцем';
-  const dx=Math.abs((p1?.x||0)-(p0?.x||0)), dy=Math.abs((p1?.y||0)-(p0?.y||0));
-  if (dx<0.02||dy<0.02) { renderSel(null,null); cords.style.display='none'; p0=null; p1=null; }
+  if (!drawing) return;
+  drawing = false;
+  badge.classList.remove('on');
+  hintEl.textContent = 'Рисуй пальцем на видео';
+  const dx = Math.abs((p1?.x||0) - (p0?.x||0));
+  const dy = Math.abs((p1?.y||0) - (p0?.y||0));
+  if (dx < 0.02 || dy < 0.02) {
+    showDrawRect(null, null); p0 = null; p1 = null;
+  }
 }
 
-area.addEventListener('touchstart',onDown,{passive:false,capture:true});
-area.addEventListener('touchmove', onMove,{passive:false,capture:true});
-area.addEventListener('touchend',  onUp,  {passive:false,capture:true});
-area.addEventListener('mousedown', onDown,{capture:true});
-window.addEventListener('mousemove',onMove);
-window.addEventListener('mouseup',  onUp);
+wrap.addEventListener('touchstart', onDown, { passive: false, capture: true });
+wrap.addEventListener('touchmove',  onMove, { passive: false, capture: true });
+wrap.addEventListener('touchend',   onUp,   { passive: false, capture: true });
+wrap.addEventListener('mousedown',  onDown, { capture: true });
+window.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup',   onUp);
 
-// ── Добавить ─────────────────────────────────────────────────────────
-btnAdd.addEventListener('click',()=>{
-  if (!p0||!p1) { toast('Сначала нарисуй область'); return; }
-  const x1=Math.min(p0.x,p1.x), x2=Math.max(p0.x,p1.x);
-  const y1=Math.min(p0.y,p1.y), y2=Math.max(p0.y,p1.y);
-  if ((x2-x1)<0.02||(y2-y1)<0.02) { toast('Область слишком маленькая'); return; }
+// ── Add region ─────────────────────────────────────────────────────────────
+btnAdd.addEventListener('click', () => {
+  if (!p0 || !p1) {
+    showToast('Сначала нарисуй область на видео'); return;
+  }
+  const x1 = Math.min(p0.x, p1.x), x2 = Math.max(p0.x, p1.x);
+  const y1 = Math.min(p0.y, p1.y), y2 = Math.max(p0.y, p1.y);
+  if ((x2 - x1) < 0.02 || (y2 - y1) < 0.02) {
+    showToast('Слишком маленькая область'); return;
+  }
+  const color = COLORS[colorIdx++ % COLORS.length];
   regions.push({
-    x1:+x1.toFixed(4),y1:+y1.toFixed(4),
-    x2:+x2.toFixed(4),y2:+y2.toFixed(4),
-    t0:+tlStart.toFixed(2),t1:+tlEnd.toFixed(2),
-    color:COLORS[colorIdx++%COLORS.length]
+    x1: +x1.toFixed(4), y1: +y1.toFixed(4),
+    x2: +x2.toFixed(4), y2: +y2.toFixed(4),
+    t0: +tlStart.toFixed(2), t1: +tlEnd.toFixed(2),
+    color
   });
-  renderSel(null,null); cords.style.display='none'; p0=null; p1=null;
-  renderRegions(); btnSend.disabled=false; toast('✓ Добавлено');
+  showDrawRect(null, null); p0 = null; p1 = null;
+  renderRegions();
+  updateRegionOverlay();
+  btnSend.disabled = false;
+  showToast('✓ Добавлено!');
 });
 
-// ── Сброс ────────────────────────────────────────────────────────────
-btnRst.addEventListener('click',()=>{
-  regions=[]; p0=null; p1=null; tlStart=0; tlEnd=duration;
-  renderSel(null,null); cords.style.display='none';
-  updateTl(); renderRegions(); btnSend.disabled=true; toast('Сброшено');
+// ── Reset ──────────────────────────────────────────────────────────────────
+btnRst.addEventListener('click', () => {
+  regions = []; colorIdx = 0; p0 = null; p1 = null;
+  tlStart = 0; tlEnd = duration;
+  showDrawRect(null, null);
+  updateTl(); renderRegions(); updateRegionOverlay();
+  btnSend.disabled = true;
+  showToast('Сброшено');
 });
 
-// ── Регионы ───────────────────────────────────────────────────────────
+// ── Regions list ───────────────────────────────────────────────────────────
 function renderRegions() {
-  regBar.querySelectorAll('.rrow').forEach(r=>r.remove());
-  if (!regions.length) { rempty.style.display='block'; return; }
-  rempty.style.display='none';
-  regions.forEach((r,i)=>{
-    const isAll=r.t0<=0.1&&r.t1>=duration-0.1;
-    const row=document.createElement('div'); row.className='rrow';
-    row.innerHTML=`
+  regBar.querySelectorAll('.rrow').forEach(r => r.remove());
+  if (!regions.length) { rempty.style.display = 'block'; return; }
+  rempty.style.display = 'none';
+  regions.forEach((r, i) => {
+    const isAll = r.t0 <= 0.1 && r.t1 >= duration - 0.1;
+    const row = document.createElement('div'); row.className = 'rrow';
+    row.innerHTML = `
       <div class="rdot" style="background:${r.color}"></div>
       <div class="rinfo">
         X:${(r.x1*100).toFixed(0)}–${(r.x2*100).toFixed(0)}%
         &nbsp;Y:${(r.y1*100).toFixed(0)}–${(r.y2*100).toFixed(0)}%
-        <span class="rtime">&nbsp;${isAll?'весь ролик':fmt(r.t0)+'→'+fmt(r.t1)}</span>
+        <span class="rtime">&nbsp;${isAll ? 'весь ролик' : fmt(r.t0)+'→'+fmt(r.t1)}</span>
       </div>
       <button class="rdel" data-i="${i}">✕</button>`;
     regBar.appendChild(row);
   });
-  regBar.querySelectorAll('.rdel').forEach(btn=>btn.addEventListener('click',e=>{
-    regions.splice(+e.currentTarget.dataset.i,1);
-    if(!regions.length) btnSend.disabled=true;
-    renderRegions(); toast('Удалено');
+  regBar.querySelectorAll('.rdel').forEach(btn => btn.addEventListener('click', e => {
+    const i = +e.currentTarget.dataset.i;
+    regions.splice(i, 1);
+    if (!regions.length) btnSend.disabled = true;
+    renderRegions(); updateRegionOverlay(); showToast('Удалено');
   }));
 }
 
-// ── Timeline ─────────────────────────────────────────────────────────
-function updateTl() {
-  const ps=tlStart/duration, pe=tlEnd/duration;
-  tlFill.style.left=(ps*100)+'%'; tlFill.style.right=((1-pe)*100)+'%';
-  tlHs.style.left=(ps*100)+'%'; tlHe.style.right=((1-pe)*100)+'%';
-  tlS.textContent=fmt(tlStart); tlD.textContent=fmt(duration);
-  tl2.textContent=(tlStart<=0.1&&tlEnd>=duration-0.1)
-    ?'Весь ролик':`▶ ${fmt(tlStart)} — ${fmt(tlEnd)}`;
-}
-function tlPct(e) {
-  const r=tlTrack.getBoundingClientRect(), s=e.touches?e.touches[0]:e;
-  return Math.max(0,Math.min(1,(s.clientX-r.left)/r.width));
-}
-const startTl=w=>e=>{e.stopPropagation();e.preventDefault();draggingTl=w;};
-tlHs.addEventListener('touchstart',startTl('start'),{passive:false});
-tlHe.addEventListener('touchstart',startTl('end'),  {passive:false});
-tlHs.addEventListener('mousedown', startTl('start'));
-tlHe.addEventListener('mousedown', startTl('end'));
-function moveTl(e){
-  if(!draggingTl) return; e.preventDefault();
-  const p=tlPct(e)*duration;
-  if(draggingTl==='start') tlStart=Math.max(0,Math.min(p,tlEnd-1));
-  else                      tlEnd=Math.min(duration,Math.max(p,tlStart+1));
-  updateTl();
-}
-window.addEventListener('touchmove',moveTl,{passive:false});
-window.addEventListener('mousemove',moveTl);
-window.addEventListener('touchend', ()=>{draggingTl=null;});
-window.addEventListener('mouseup',  ()=>{draggingTl=null;});
-
-// ── Отправка ─────────────────────────────────────────────────────────
-btnSend.addEventListener('click',()=>{
-  if (!regions.length) return;
-  const payload=JSON.stringify({
-    regions:regions.map(({x1,y1,x2,y2,t0,t1})=>({x1,y1,x2,y2,t0,t1}))
+// Draw committed regions as colored boxes on the SVG overlay
+function updateRegionOverlay() {
+  // Remove old region rects (not draw-rect)
+  ov.querySelectorAll('.rbox, .rbox-fill, .rlabel').forEach(el => el.remove());
+  const r = wrap.getBoundingClientRect();
+  regions.forEach((reg, i) => {
+    const x1 = reg.x1 * r.width,  y1 = reg.y1 * r.height;
+    const x2 = reg.x2 * r.width,  y2 = reg.y2 * r.height;
+    const fill = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    fill.setAttribute('x', x1); fill.setAttribute('y', y1);
+    fill.setAttribute('width', x2-x1); fill.setAttribute('height', y2-y1);
+    fill.setAttribute('rx', 3);
+    fill.setAttribute('fill', reg.color); fill.setAttribute('fill-opacity', '0.18');
+    fill.setAttribute('class', 'rbox-fill');
+    const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    box.setAttribute('x', x1); box.setAttribute('y', y1);
+    box.setAttribute('width', x2-x1); box.setAttribute('height', y2-y1);
+    box.setAttribute('rx', 3);
+    box.setAttribute('fill', 'none');
+    box.setAttribute('stroke', reg.color); box.setAttribute('stroke-width', '2.5');
+    box.setAttribute('class', 'rbox');
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', x1 + 5); label.setAttribute('y', y1 + 14);
+    label.setAttribute('class', 'rlabel');
+    label.setAttribute('fill', reg.color);
+    label.textContent = '#' + (i+1);
+    ov.appendChild(fill); ov.appendChild(box); ov.appendChild(label);
   });
-  if (tg) tg.sendData(payload);
-  else alert('Payload:\n'+payload);
+}
+
+// Redraw overlay when window resizes
+window.addEventListener('resize', updateRegionOverlay);
+
+// ── Send ───────────────────────────────────────────────────────────────────
+btnSend.addEventListener('click', () => {
+  if (!regions.length) return;
+  const payload = JSON.stringify({
+    regions: regions.map(({ x1, y1, x2, y2, t0, t1 }) => ({ x1, y1, x2, y2, t0, t1 }))
+  });
+  log('Sending: ' + payload);
+
+  // Method 1: Telegram WebApp sendData
+  if (tg && typeof tg.sendData === 'function') {
+    try {
+      tg.sendData(payload);
+      log('sendData called OK');
+      return;
+    } catch(e) {
+      log('sendData error: ' + e);
+    }
+  }
+
+  // Method 2: postMessage to parent
+  try {
+    window.parent.postMessage({ type: 'blur_regions', payload }, '*');
+    log('postMessage sent');
+  } catch(e) {
+    log('postMessage error: ' + e);
+  }
+
+  // Debug fallback
+  if (dbgMode) {
+    alert('DEBUG payload:\n' + payload);
+  } else {
+    showToast('Отправляю…');
+  }
 });
 
-// ── Init ─────────────────────────────────────────────────────────────
-updateTl();
-renderRegions();
+// ── Toast ──────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  let t = document.getElementById('_toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_toast';
+    Object.assign(t.style, {
+      position: 'fixed', bottom: '76px', left: '50%',
+      transform: 'translateX(-50%) translateY(10px)',
+      background: 'var(--surface2)', border: '1px solid var(--border)',
+      color: 'var(--text)', fontSize: '11px', padding: '7px 16px',
+      borderRadius: '20px', opacity: '0', transition: 'all .2s',
+      pointerEvents: 'none', whiteSpace: 'nowrap', zIndex: '999'
+    });
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(10px)';
+  }, 1800);
+}
 </script>
 </body>
 </html>
