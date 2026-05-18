@@ -7,158 +7,72 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
   :root {
-    --bg: #0d0d14;
-    --surface: #13131f;
-    --surface2: #1c1c2e;
-    --accent: #7c5cfc;
-    --accent2: #fc5c7d;
-    --text: #e2e2f0;
-    --muted: #55556e;
-    --border: #252538;
-    --handle-w: 16px;
+    --bg: #0d0d14; --surface: #13131f; --surface2: #1c1c2e;
+    --accent: #7c5cfc; --accent2: #fc5c7d;
+    --text: #e2e2f0; --muted: #55556e; --border: #252538;
   }
-
   html, body {
-    height: 100%;
-    width: 100%;
-    background: var(--bg);
-    color: var(--text);
+    height: 100%; width: 100%;
+    background: var(--bg); color: var(--text);
     font-family: 'SF Mono', 'Fira Code', monospace;
-    overflow: hidden;
-    /* КРИТИЧНО: отключаем браузерные жесты чтобы touch работал на canvas */
-    touch-action: none;
-    -webkit-user-select: none;
-    user-select: none;
+    overflow: hidden; touch-action: none;
+    -webkit-user-select: none; user-select: none;
   }
-
-  #app {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh;
-    width: 100%;
-  }
+  #app { display: flex; flex-direction: column; height: 100dvh; width: 100%; }
 
   /* HEADER */
   #header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 14px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    min-height: 42px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px; background: var(--surface);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; min-height: 42px;
   }
   #header h1 { font-size: 13px; font-weight: 700; color: var(--accent); letter-spacing: .05em; }
   #hint { font-size: 10px; color: var(--muted); }
 
-  /* CANVAS AREA — занимает всё свободное место */
+  /* CANVAS AREA */
   #canvas-area {
-    flex: 1;
-    position: relative;
-    background: #000;
-    overflow: hidden;
-    /* touch-action: none здесь ОБЯЗАТЕЛЬНО */
-    touch-action: none;
-    cursor: crosshair;
+    flex: 1; position: relative; background: #000; overflow: hidden;
+    touch-action: none; cursor: crosshair;
   }
-
   #canvas-area canvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-    touch-action: none;
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; touch-action: none;
   }
-
-  /* поверх canvas — svg для рисования прямоугольника */
   #overlay-svg {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    overflow: visible;
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%; pointer-events: none; overflow: visible;
   }
-
-  #draw-rect {
-    fill: rgba(124,92,252,0.18);
-    stroke: #7c5cfc;
-    stroke-width: 2;
-    display: none;
-  }
-
-  /* угловые ручки */
-  .corner-dot {
-    fill: #7c5cfc;
-    display: none;
-  }
-
-  /* подсказка рисования */
+  #draw-rect { fill: rgba(124,92,252,0.18); stroke: #7c5cfc; stroke-width: 2; display: none; }
+  .corner-dot { fill: #7c5cfc; display: none; }
   #draw-badge {
-    position: absolute;
-    bottom: 10px; left: 50%;
-    transform: translateX(-50%);
-    background: rgba(124,92,252,.9);
-    color: #fff;
-    font-size: 11px;
-    padding: 5px 14px;
-    border-radius: 14px;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity .2s;
-    white-space: nowrap;
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(124,92,252,.9); color: #fff; font-size: 11px;
+    padding: 5px 14px; border-radius: 14px; pointer-events: none;
+    opacity: 0; transition: opacity .2s; white-space: nowrap;
   }
   #draw-badge.show { opacity: 1; }
-
-  /* координаты */
   #coords {
-    position: absolute;
-    top: 8px; left: 8px;
-    background: rgba(13,13,20,.85);
-    border: 1px solid var(--border);
-    padding: 4px 8px;
-    font-size: 10px;
-    color: var(--accent);
-    border-radius: 4px;
-    display: none;
-    line-height: 1.7;
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(13,13,20,.85); border: 1px solid var(--border);
+    padding: 4px 8px; font-size: 10px; color: var(--accent);
+    border-radius: 4px; display: none; line-height: 1.7;
   }
-
-  /* NO IMAGE */
   #no-img {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: var(--muted);
-    font-size: 12px;
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; color: var(--muted); font-size: 12px; text-align: center; padding: 20px;
   }
   #no-img svg { opacity: .25; }
-
-  /* LOADING */
   #loading {
-    position: absolute;
-    inset: 0;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 14px;
-    z-index: 50;
+    position: absolute; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; z-index: 50;
   }
   #loading.hidden { display: none; }
   .spinner {
-    width: 34px; height: 34px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
+    width: 34px; height: 34px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -166,21 +80,13 @@
 
   /* REGIONS */
   #regions-bar {
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    max-height: 96px;
-    overflow-y: auto;
-    flex-shrink: 0;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
+    background: var(--surface); border-top: 1px solid var(--border);
+    max-height: 96px; overflow-y: auto; flex-shrink: 0;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
   }
   .rrow {
-    display: flex;
-    align-items: center;
-    padding: 5px 12px;
-    border-bottom: 1px solid var(--border);
-    gap: 7px;
-    font-size: 10px;
+    display: flex; align-items: center; padding: 5px 12px;
+    border-bottom: 1px solid var(--border); gap: 7px; font-size: 10px;
     animation: fadeIn .15s ease;
   }
   @keyframes fadeIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:none} }
@@ -192,67 +98,46 @@
 
   /* TIMELINE */
   #tl-section {
-    background: var(--surface2);
-    border-top: 1px solid var(--border);
-    padding: 9px 14px 7px;
-    flex-shrink: 0;
+    background: var(--surface2); border-top: 1px solid var(--border);
+    padding: 9px 14px 7px; flex-shrink: 0;
   }
   .tl-lbl { font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 5px; }
   #tl-track {
-    position: relative;
-    height: 26px;
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
+    position: relative; height: 26px; background: var(--bg);
+    border-radius: 6px; border: 1px solid var(--border);
   }
   #tl-fill {
     position: absolute; top: 0; bottom: 0;
     background: rgba(124,92,252,.25);
-    border-left: 3px solid var(--accent);
-    border-right: 3px solid var(--accent);
+    border-left: 3px solid var(--accent); border-right: 3px solid var(--accent);
     pointer-events: none;
   }
   .tl-h {
-    position: absolute; top: 50%;
-    width: var(--handle-w); height: 30px;
-    background: var(--accent);
-    border-radius: 4px;
-    cursor: ew-resize;
-    touch-action: none;
+    position: absolute; top: 50%; width: 16px; height: 30px;
+    background: var(--accent); border-radius: 4px;
+    cursor: ew-resize; touch-action: none;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(124,92,252,.5);
-    z-index: 5;
+    box-shadow: 0 2px 8px rgba(124,92,252,.5); z-index: 5;
   }
   .tl-h::before {
-    content: '';
-    width: 2px; height: 10px;
-    background: rgba(255,255,255,.5);
-    border-radius: 1px;
-    box-shadow: 3px 0 0 rgba(255,255,255,.4), -3px 0 0 rgba(255,255,255,.4);
+    content: ''; width: 2px; height: 10px; background: rgba(255,255,255,.5);
+    border-radius: 1px; box-shadow: 3px 0 0 rgba(255,255,255,.4), -3px 0 0 rgba(255,255,255,.4);
   }
   #tl-hs { transform: translate(-50%, -50%); }
-  #tl-he { transform: translate(50%, -50%); }
-  #tl-info {
-    display: flex; justify-content: space-between;
-    margin-top: 4px; font-size: 9px; color: var(--muted);
-  }
+  #tl-he { transform: translate(50%,  -50%); }
+  #tl-info { display: flex; justify-content: space-between; margin-top: 4px; font-size: 9px; color: var(--muted); }
   #tl-range-lbl { text-align: center; font-size: 10px; color: var(--accent); margin-top: 2px; }
 
   /* BOTTOM */
   #bottom {
-    display: flex;
-    gap: 8px;
-    padding: 9px 14px;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
+    display: flex; gap: 8px; padding: 9px 14px;
+    background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
   }
   .btn {
-    flex: 1; padding: 10px 6px;
-    border: none; border-radius: 8px;
+    flex: 1; padding: 10px 6px; border: none; border-radius: 8px;
     font-family: inherit; font-size: 11px; font-weight: 600;
     letter-spacing: .04em; text-transform: uppercase;
-    cursor: pointer; transition: transform .12s, opacity .12s;
+    cursor: pointer; transition: transform .12s;
   }
   .btn:active { transform: scale(.96); }
   .btn-sec { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
@@ -265,9 +150,8 @@
     position: fixed; bottom: 80px; left: 50%;
     transform: translateX(-50%) translateY(16px);
     background: var(--surface2); border: 1px solid var(--border);
-    color: var(--text); font-size: 11px;
-    padding: 7px 16px; border-radius: 20px;
-    opacity: 0; transition: all .22s;
+    color: var(--text); font-size: 11px; padding: 7px 16px;
+    border-radius: 20px; opacity: 0; transition: all .22s;
     pointer-events: none; white-space: nowrap; z-index: 999;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -275,17 +159,13 @@
 </head>
 <body>
 <div id="app">
-
   <div id="header">
     <h1>🎯 Blur Editor</h1>
     <span id="hint">Рисуй пальцем область</span>
   </div>
 
-  <div id="canvas-area" id="canvas-area">
-    <!-- canvas для отрисовки превью -->
+  <div id="canvas-area">
     <canvas id="cv"></canvas>
-
-    <!-- SVG поверх для рисования рамки -->
     <svg id="overlay-svg" xmlns="http://www.w3.org/2000/svg">
       <rect id="draw-rect" rx="3"/>
       <circle class="corner-dot" id="c-tl" r="5"/>
@@ -293,10 +173,8 @@
       <circle class="corner-dot" id="c-bl" r="5"/>
       <circle class="corner-dot" id="c-br" r="5"/>
     </svg>
-
     <div id="draw-badge">✏️ РИСУЮ</div>
     <div id="coords"></div>
-
     <div id="no-img">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -305,7 +183,6 @@
       </svg>
       <span>Превью не загружено —<br>рисуй область как будто видео здесь</span>
     </div>
-
     <div id="loading">
       <div class="spinner"></div>
       <div class="load-txt">Загружаю превью…</div>
@@ -327,7 +204,7 @@
       <span id="tl-s">0:00</span>
       <span id="tl-d">0:00</span>
     </div>
-    <div id="tl-range-lbl" id="tl-range-lbl">Весь ролик</div>
+    <div id="tl-range-lbl">Весь ролик</div>
   </div>
 
   <div id="bottom">
@@ -335,27 +212,23 @@
     <button class="btn btn-add" id="btn-add">+ Добавить</button>
     <button class="btn btn-pri" id="btn-send" disabled>Применить</button>
   </div>
-
 </div>
 <div id="toast"></div>
 
 <script>
-// ── Telegram ──────────────────────────────────────────────────────────
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 
-// ── Параметры из URL ───────────────────────────────────────────────────
-const params  = new URLSearchParams(location.search);
-const imgSrc  = params.get('img') || '';          // data:image/jpeg;base64,...
-const duration = Math.max(1, parseFloat(params.get('dur') || '30'));
+// ── Параметры ─────────────────────────────────────────────────────────
+const params    = new URLSearchParams(location.search);
+const fileId    = params.get('file_id')    || '';
+const botToken  = params.get('bot_token')  || '';
+const imgSrc    = params.get('img')        || '';   // fallback base64
+const duration  = Math.max(1, parseFloat(params.get('dur') || '30'));
 
 // ── Состояние ─────────────────────────────────────────────────────────
-let regions = [];
-let tlStart = 0, tlEnd = duration;
-let draggingTl = null;   // 'start'|'end'
-let drawing = false;
-let p0 = null, p1 = null;  // {x,y} в долях 0..1 от canvas-area
-
+let regions = [], tlStart = 0, tlEnd = duration;
+let draggingTl = null, drawing = false, p0 = null, p1 = null;
 const COLORS = ['#7c5cfc','#fc5c7d','#5cf8ca','#f8d95c','#fc955c','#5ca8fc'];
 let colorIdx = 0;
 
@@ -383,277 +256,243 @@ const loading   = document.getElementById('loading');
 const noImg     = document.getElementById('no-img');
 const hint      = document.getElementById('hint');
 
-// ── Утилиты ───────────────────────────────────────────────────────────
 function fmt(s) {
-  const m = Math.floor(s / 60);
-  return `${m}:${Math.floor(s % 60).toString().padStart(2,'0')}`;
+  return `${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;
 }
-function toast(msg, ms = 1800) {
+function toast(msg, ms=1800) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
+  el.textContent = msg; el.classList.add('show');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), ms);
 }
 
 // ── Canvas resize ─────────────────────────────────────────────────────
-function resizeCanvas() {
-  cv.width  = area.clientWidth;
-  cv.height = area.clientHeight;
-  drawImage();
-}
-const ro = new ResizeObserver(resizeCanvas);
+const ro = new ResizeObserver(() => {
+  cv.width = area.clientWidth; cv.height = area.clientHeight; drawImg();
+});
 ro.observe(area);
 
 // ── Загрузка превью ───────────────────────────────────────────────────
-let img = null;
-let imgLoaded = false;
+let imgEl = null;
 
-function drawImage() {
+function drawImg() {
   ctx.clearRect(0, 0, cv.width, cv.height);
-  if (!img || !imgLoaded) return;
-
-  // вписываем изображение с сохранением пропорций
-  const iw = img.naturalWidth, ih = img.naturalHeight;
+  if (!imgEl) return;
+  const iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
   const cw = cv.width, ch = cv.height;
-  const scale = Math.min(cw / iw, ch / ih);
-  const dw = iw * scale, dh = ih * scale;
-  const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
-  ctx.drawImage(img, dx, dy, dw, dh);
+  const sc = Math.min(cw/iw, ch/ih);
+  ctx.drawImage(imgEl, (cw-iw*sc)/2, (ch-ih*sc)/2, iw*sc, ih*sc);
 }
 
-if (imgSrc) {
-  img = new Image();
-  img.onload = () => {
-    imgLoaded = true;
+function loadImg(src) {
+  const i = new Image();
+  i.crossOrigin = 'anonymous';
+  i.onload = () => {
+    imgEl = i;
     loading.classList.add('hidden');
     noImg.style.display = 'none';
-    drawImage();
+    drawImg();
   };
-  img.onerror = () => {
+  i.onerror = () => {
     loading.classList.add('hidden');
     noImg.style.display = 'flex';
-    toast('Превью не загрузилось — рисуй как обычно');
+    toast('Превью не загрузилось');
   };
-  img.src = imgSrc;
-} else {
+  i.src = src;
+}
+
+async function loadPreview() {
+  // Способ 1: file_id через Bot API
+  if (fileId && botToken) {
+    try {
+      const r = await fetch(
+        `https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`
+      );
+      const data = await r.json();
+      if (data.ok && data.result?.file_path) {
+        const url = `https://api.telegram.org/file/bot${botToken}/${data.result.file_path}`;
+        loadImg(url);
+        return;
+      }
+    } catch(e) {
+      console.warn('getFile failed:', e);
+    }
+  }
+
+  // Способ 2: base64 в параметре img (fallback)
+  if (imgSrc) {
+    loadImg(imgSrc);
+    return;
+  }
+
+  // Нет превью
   loading.classList.add('hidden');
   noImg.style.display = 'flex';
 }
 
-// ── Получение координат из touch/mouse ────────────────────────────────
-function getAreaPct(e) {
+loadPreview();
+
+// ── Координаты из touch/mouse ─────────────────────────────────────────
+function getPct(e) {
   const r = area.getBoundingClientRect();
-  const src = e.touches ? e.touches[0] : e;
+  const s = e.touches ? e.touches[0] : e;
   return {
-    x: Math.max(0, Math.min(1, (src.clientX - r.left) / r.width)),
-    y: Math.max(0, Math.min(1, (src.clientY - r.top)  / r.height)),
+    x: Math.max(0, Math.min(1, (s.clientX - r.left) / r.width)),
+    y: Math.max(0, Math.min(1, (s.clientY - r.top)  / r.height)),
   };
 }
 
-// ── Отрисовка рамки выделения ─────────────────────────────────────────
-function renderSelRect(a, b) {
-  if (!a || !b) { drawRect.style.display = 'none'; corners.forEach(c => c.style.display='none'); return; }
+// ── Рамка выделения ───────────────────────────────────────────────────
+function renderSel(a, b) {
+  if (!a || !b) {
+    drawRect.style.display = 'none';
+    corners.forEach(c => c.style.display = 'none');
+    return;
+  }
   const r = area.getBoundingClientRect();
-  const x1 = Math.min(a.x, b.x) * r.width;
-  const y1 = Math.min(a.y, b.y) * r.height;
-  const x2 = Math.max(a.x, b.x) * r.width;
-  const y2 = Math.max(a.y, b.y) * r.height;
-
-  drawRect.setAttribute('x', x1);
-  drawRect.setAttribute('y', y1);
-  drawRect.setAttribute('width',  x2 - x1);
-  drawRect.setAttribute('height', y2 - y1);
+  const x1 = Math.min(a.x,b.x)*r.width, y1 = Math.min(a.y,b.y)*r.height;
+  const x2 = Math.max(a.x,b.x)*r.width, y2 = Math.max(a.y,b.y)*r.height;
+  drawRect.setAttribute('x', x1); drawRect.setAttribute('y', y1);
+  drawRect.setAttribute('width', x2-x1); drawRect.setAttribute('height', y2-y1);
   drawRect.style.display = 'block';
-
-  const pts = [[x1,y1],[x2,y1],[x1,y2],[x2,y2]];
-  corners.forEach((c, i) => {
-    c.setAttribute('cx', pts[i][0]);
-    c.setAttribute('cy', pts[i][1]);
-    c.style.display = 'block';
+  [[x1,y1],[x2,y1],[x1,y2],[x2,y2]].forEach(([cx,cy],i) => {
+    corners[i].setAttribute('cx', cx); corners[i].setAttribute('cy', cy);
+    corners[i].style.display = 'block';
   });
-
   coordsEl.style.display = 'block';
   coordsEl.innerHTML =
     `X: ${(Math.min(a.x,b.x)*100).toFixed(0)}%→${(Math.max(a.x,b.x)*100).toFixed(0)}%<br>` +
     `Y: ${(Math.min(a.y,b.y)*100).toFixed(0)}%→${(Math.max(a.y,b.y)*100).toFixed(0)}%`;
 }
 
-// ── Touch/Mouse события на canvas-area ───────────────────────────────
+// ── Touch / Mouse на canvas ───────────────────────────────────────────
 function onDown(e) {
-  // Игнорируем если нажали на timeline handle
   if (e.target === tlHs || e.target === tlHe) return;
-  // Игнорируем если нажали на кнопки
-  if (e.target.closest('#bottom') || e.target.closest('#tl-section')) return;
-
-  e.preventDefault();
-  e.stopPropagation();
-
-  drawing = true;
-  p0 = getAreaPct(e);
-  p1 = {...p0};
-  drawBadge.classList.add('show');
-  hint.textContent = 'Рисую…';
+  if (e.target.closest && (e.target.closest('#bottom') || e.target.closest('#tl-section'))) return;
+  e.preventDefault(); e.stopPropagation();
+  drawing = true; p0 = getPct(e); p1 = {...p0};
+  drawBadge.classList.add('show'); hint.textContent = 'Рисую…';
 }
-
 function onMove(e) {
   if (!drawing) return;
-  e.preventDefault();
-  p1 = getAreaPct(e);
-  renderSelRect(p0, p1);
+  e.preventDefault(); p1 = getPct(e); renderSel(p0, p1);
 }
-
-function onUp(e) {
+function onUp() {
   if (!drawing) return;
-  drawing = false;
-  drawBadge.classList.remove('show');
+  drawing = false; drawBadge.classList.remove('show');
   hint.textContent = 'Рисуй пальцем область';
-
-  const dx = Math.abs((p1?.x||0) - (p0?.x||0));
-  const dy = Math.abs((p1?.y||0) - (p0?.y||0));
+  const dx = Math.abs((p1?.x||0)-(p0?.x||0));
+  const dy = Math.abs((p1?.y||0)-(p0?.y||0));
   if (dx < 0.02 || dy < 0.02) {
-    renderSelRect(null, null);
-    coordsEl.style.display = 'none';
+    renderSel(null, null); coordsEl.style.display = 'none';
     p0 = null; p1 = null;
   }
 }
 
-// Регистрируем ТОЛЬКО на area, с capture=true чтобы перехватить до браузера
-area.addEventListener('touchstart', onDown, {passive: false, capture: true});
-area.addEventListener('touchmove',  onMove, {passive: false, capture: true});
-area.addEventListener('touchend',   onUp,   {passive: false, capture: true});
-area.addEventListener('mousedown',  onDown, {capture: true});
+area.addEventListener('touchstart', onDown, {passive:false, capture:true});
+area.addEventListener('touchmove',  onMove, {passive:false, capture:true});
+area.addEventListener('touchend',   onUp,   {passive:false, capture:true});
+area.addEventListener('mousedown',  onDown, {capture:true});
 window.addEventListener('mousemove', onMove);
 window.addEventListener('mouseup',   onUp);
 
-// ── Добавить область ──────────────────────────────────────────────────
+// ── Добавить ─────────────────────────────────────────────────────────
 btnAdd.addEventListener('click', () => {
-  if (!p0 || !p1) { toast('Сначала нарисуй область'); return; }
-  const x1 = Math.min(p0.x, p1.x), x2 = Math.max(p0.x, p1.x);
-  const y1 = Math.min(p0.y, p1.y), y2 = Math.max(p0.y, p1.y);
-  if ((x2-x1) < 0.02 || (y2-y1) < 0.02) { toast('Область слишком маленькая'); return; }
-
+  if (!p0||!p1) { toast('Сначала нарисуй область'); return; }
+  const x1=Math.min(p0.x,p1.x), x2=Math.max(p0.x,p1.x);
+  const y1=Math.min(p0.y,p1.y), y2=Math.max(p0.y,p1.y);
+  if ((x2-x1)<0.02||(y2-y1)<0.02) { toast('Область слишком маленькая'); return; }
   regions.push({
-    x1: +x1.toFixed(4), y1: +y1.toFixed(4),
-    x2: +x2.toFixed(4), y2: +y2.toFixed(4),
-    t0: +tlStart.toFixed(2), t1: +tlEnd.toFixed(2),
+    x1:+x1.toFixed(4), y1:+y1.toFixed(4),
+    x2:+x2.toFixed(4), y2:+y2.toFixed(4),
+    t0:+tlStart.toFixed(2), t1:+tlEnd.toFixed(2),
     color: COLORS[colorIdx++ % COLORS.length],
   });
-
-  renderSelRect(null, null);
-  coordsEl.style.display = 'none';
-  p0 = null; p1 = null;
-  renderRegions();
-  btnSend.disabled = false;
+  renderSel(null,null); coordsEl.style.display='none';
+  p0=null; p1=null;
+  renderRegions(); btnSend.disabled=false;
   toast('✓ Область добавлена');
 });
 
-// ── Сброс ─────────────────────────────────────────────────────────────
+// ── Сброс ────────────────────────────────────────────────────────────
 btnReset.addEventListener('click', () => {
-  regions = []; p0 = null; p1 = null;
-  tlStart = 0; tlEnd = duration;
-  renderSelRect(null, null);
-  coordsEl.style.display = 'none';
-  updateTlUI();
-  renderRegions();
-  btnSend.disabled = true;
+  regions=[]; p0=null; p1=null; tlStart=0; tlEnd=duration;
+  renderSel(null,null); coordsEl.style.display='none';
+  updateTl(); renderRegions(); btnSend.disabled=true;
   toast('Сброшено');
 });
 
 // ── Список областей ───────────────────────────────────────────────────
 function renderRegions() {
-  regBar.querySelectorAll('.rrow').forEach(r => r.remove());
-  if (!regions.length) { rempty.style.display = 'block'; return; }
-  rempty.style.display = 'none';
-
-  regions.forEach((r, i) => {
-    const isAll = r.t0 <= 0.1 && r.t1 >= duration - 0.1;
-    const tStr = isAll ? 'весь ролик' : `${fmt(r.t0)}→${fmt(r.t1)}`;
+  regBar.querySelectorAll('.rrow').forEach(r=>r.remove());
+  if (!regions.length) { rempty.style.display='block'; return; }
+  rempty.style.display='none';
+  regions.forEach((r,i) => {
+    const isAll = r.t0<=0.1 && r.t1>=duration-0.1;
     const row = document.createElement('div');
-    row.className = 'rrow';
-    row.innerHTML = `
+    row.className='rrow';
+    row.innerHTML=`
       <div class="rdot" style="background:${r.color}"></div>
       <div class="rinfo">
         X:${(r.x1*100).toFixed(0)}–${(r.x2*100).toFixed(0)}%
         Y:${(r.y1*100).toFixed(0)}–${(r.y2*100).toFixed(0)}%
-        <span class="rtime">${tStr}</span>
+        <span class="rtime">${isAll?'весь ролик':fmt(r.t0)+'→'+fmt(r.t1)}</span>
       </div>
-      <button class="rdel" data-i="${i}">✕</button>
-    `;
+      <button class="rdel" data-i="${i}">✕</button>`;
     regBar.appendChild(row);
   });
-
   regBar.querySelectorAll('.rdel').forEach(btn => {
     btn.addEventListener('click', e => {
-      regions.splice(+e.currentTarget.dataset.i, 1);
-      if (!regions.length) btnSend.disabled = true;
-      renderRegions();
-      toast('Удалено');
+      regions.splice(+e.currentTarget.dataset.i,1);
+      if (!regions.length) btnSend.disabled=true;
+      renderRegions(); toast('Удалено');
     });
   });
 }
 
-// ── Timeline ──────────────────────────────────────────────────────────
-function updateTlUI() {
-  const ps = tlStart / duration;
-  const pe = tlEnd   / duration;
-  tlFill.style.left  = (ps * 100) + '%';
-  tlFill.style.right = ((1 - pe) * 100) + '%';
-  tlHs.style.left  = (ps * 100) + '%';
-  tlHe.style.right = ((1 - pe) * 100) + '%';
-  tlS.textContent = fmt(tlStart);
-  tlD.textContent = fmt(duration);
-  const isAll = tlStart <= 0.1 && tlEnd >= duration - 0.1;
-  tlRlbl.textContent = isAll ? 'Весь ролик' : `▶ ${fmt(tlStart)} — ${fmt(tlEnd)}`;
+// ── Timeline ─────────────────────────────────────────────────────────
+function updateTl() {
+  const ps=tlStart/duration, pe=tlEnd/duration;
+  tlFill.style.left=(ps*100)+'%'; tlFill.style.right=((1-pe)*100)+'%';
+  tlHs.style.left=(ps*100)+'%'; tlHe.style.right=((1-pe)*100)+'%';
+  tlS.textContent=fmt(tlStart); tlD.textContent=fmt(duration);
+  tlRlbl.textContent=(tlStart<=0.1&&tlEnd>=duration-0.1)
+    ? 'Весь ролик' : `▶ ${fmt(tlStart)} — ${fmt(tlEnd)}`;
 }
-
 function tlPct(e) {
-  const r = tlTrack.getBoundingClientRect();
-  const src = e.touches ? e.touches[0] : e;
-  return Math.max(0, Math.min(1, (src.clientX - r.left) / r.width));
+  const r=tlTrack.getBoundingClientRect();
+  const s=e.touches?e.touches[0]:e;
+  return Math.max(0,Math.min(1,(s.clientX-r.left)/r.width));
 }
-
-function startTlDrag(which) {
-  return e => {
-    e.stopPropagation();
-    e.preventDefault();
-    draggingTl = which;
-  };
-}
-
-tlHs.addEventListener('touchstart', startTlDrag('start'), {passive: false});
-tlHe.addEventListener('touchstart', startTlDrag('end'),   {passive: false});
-tlHs.addEventListener('mousedown',  startTlDrag('start'));
-tlHe.addEventListener('mousedown',  startTlDrag('end'));
-
+function startTl(which) { return e=>{ e.stopPropagation(); e.preventDefault(); draggingTl=which; }; }
+tlHs.addEventListener('touchstart',startTl('start'),{passive:false});
+tlHe.addEventListener('touchstart',startTl('end'),{passive:false});
+tlHs.addEventListener('mousedown', startTl('start'));
+tlHe.addEventListener('mousedown', startTl('end'));
 function moveTl(e) {
-  if (!draggingTl) return;
-  e.preventDefault();
-  const p = tlPct(e) * duration;
-  if (draggingTl === 'start') tlStart = Math.max(0, Math.min(p, tlEnd - 1));
-  else                         tlEnd   = Math.min(duration, Math.max(p, tlStart + 1));
-  updateTlUI();
+  if (!draggingTl) return; e.preventDefault();
+  const p=tlPct(e)*duration;
+  if (draggingTl==='start') tlStart=Math.max(0,Math.min(p,tlEnd-1));
+  else                       tlEnd=Math.min(duration,Math.max(p,tlStart+1));
+  updateTl();
 }
-window.addEventListener('touchmove', moveTl, {passive: false});
-window.addEventListener('mousemove', moveTl);
-window.addEventListener('touchend',  () => { draggingTl = null; });
-window.addEventListener('mouseup',   () => { draggingTl = null; });
+window.addEventListener('touchmove',moveTl,{passive:false});
+window.addEventListener('mousemove',moveTl);
+window.addEventListener('touchend',()=>{draggingTl=null;});
+window.addEventListener('mouseup', ()=>{draggingTl=null;});
 
-// ── Отправка ──────────────────────────────────────────────────────────
+// ── Отправка ─────────────────────────────────────────────────────────
 btnSend.addEventListener('click', () => {
   if (!regions.length) return;
   const payload = JSON.stringify({
-    regions: regions.map(({x1,y1,x2,y2,t0,t1}) => ({x1,y1,x2,y2,t0,t1}))
+    regions: regions.map(({x1,y1,x2,y2,t0,t1})=>({x1,y1,x2,y2,t0,t1}))
   });
-  if (tg) {
-    tg.sendData(payload);
-  } else {
-    alert('Payload:\n' + payload);
-  }
+  if (tg) tg.sendData(payload);
+  else alert('Payload:\n'+payload);
 });
 
 // ── Init ─────────────────────────────────────────────────────────────
-updateTlUI();
+updateTl();
 renderRegions();
 </script>
 </body>
