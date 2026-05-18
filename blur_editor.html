@@ -70,7 +70,6 @@ html, body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Timeline scrubber (visual only — one frame shown) */
 #scrubber-section {
   background: var(--surface2); border-top: 1px solid var(--border);
   padding: 7px 14px 5px; flex-shrink: 0;
@@ -99,7 +98,6 @@ html, body {
 #scrub-info { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9px; color: var(--muted); }
 #scrub-now { color: var(--accent); }
 
-/* Blur time range */
 #range-section {
   background: var(--surface2); border-top: 1px solid var(--border);
   padding: 6px 14px 5px; flex-shrink: 0;
@@ -131,7 +129,6 @@ html, body {
 #tl-info { display: flex; justify-content: space-between; margin-top: 3px; font-size: 9px; color: var(--muted); }
 #tl-range { color: var(--danger); text-align: center; font-size: 9px; margin-top: 2px; }
 
-/* Regions list */
 #regions-bar {
   background: var(--surface); border-top: 1px solid var(--border);
   max-height: 76px; overflow-y: auto; flex-shrink: 0;
@@ -147,7 +144,6 @@ html, body {
 .rdel { background: none; border: none; color: var(--danger); font-size: 15px; cursor: pointer; padding: 0 3px; }
 .rempty { text-align: center; color: var(--muted); font-size: 10px; padding: 10px; }
 
-/* Bottom bar */
 #bottom {
   display: flex; gap: 8px; padding: 8px 14px;
   background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0;
@@ -162,6 +158,14 @@ html, body {
 .btn-add { background: transparent; color: var(--accent); border: 1px solid var(--accent); flex: 0 0 auto; padding: 10px 14px; }
 .btn-pri { background: var(--accent); color: #fff; }
 .btn-pri:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+/* Debug overlay — hidden by default */
+#dbg {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(0,0,0,.85); color: #0f0; font-size: 9px;
+  padding: 4px 8px; z-index: 9999; display: none;
+  white-space: pre-wrap; word-break: break-all; max-height: 80px; overflow-y: auto;
+}
 
 #toast {
   position: fixed; bottom: 76px; left: 50%;
@@ -237,16 +241,39 @@ html, body {
     <button class="btn btn-pri" id="btn-send" disabled>Применить</button>
   </div>
 </div>
+<div id="dbg"></div>
 <div id="toast"></div>
 
 <script>
-const tg = window.Telegram?.WebApp;
-try { if (tg) { tg.ready(); tg.expand(); } } catch(e) {}
+// ── Debug helper ──────────────────────────────────────────────────
+const dbgEl = document.getElementById('dbg');
+let _dbgLines = [];
+function dbg(msg) {
+  console.log('[blur]', msg);
+  _dbgLines.push(msg);
+  if (_dbgLines.length > 6) _dbgLines.shift();
+  // Uncomment next line to show on-screen debug overlay:
+  // dbgEl.style.display = 'block'; dbgEl.textContent = _dbgLines.join('\n');
+}
 
+// ── Telegram WebApp init ──────────────────────────────────────────
+const tg = window.Telegram?.WebApp;
+try {
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    dbg('tg.ready() OK, platform=' + (tg.platform || 'unknown'));
+    dbg('tg.initData len=' + (tg.initData?.length || 0));
+  } else {
+    dbg('tg WebApp NOT available');
+  }
+} catch(e) { dbg('tg init error: ' + e); }
+
+// ── URL params ───────────────────────────────────────────────────
 const params   = new URLSearchParams(location.search);
 const duration = Math.max(1, parseFloat(params.get('dur') || '30'));
-// Image URL passed as ?img=https://litterbox.catbox.moe/xxx.jpg
 const imgUrl   = params.get('img') || '';
+dbg('dur=' + duration + ' img=' + (imgUrl ? imgUrl.slice(0,40) + '...' : 'none'));
 
 let regions = [], tlStart = 0, tlEnd = duration, scrubTime = 0;
 let drawing = false, p0 = null, p1 = null;
@@ -254,78 +281,96 @@ let draggingTl = null, draggingScrub = false;
 const COLORS = ['#7c5cfc','#fc5c7d','#5cf8ca','#f8d95c','#fc955c','#5ca8fc'];
 let colorIdx = 0;
 
-const wrap     = document.getElementById('canvas-wrap');
-const cv       = document.getElementById('cv');
-const ctx      = cv.getContext('2d');
-const ov       = document.getElementById('ov');
-const drect    = document.getElementById('draw-rect');
-const handles  = ['h-tl','h-tr','h-bl','h-br'].map(id => document.getElementById(id));
-const badge    = document.getElementById('badge');
-const noImg    = document.getElementById('no-img');
-const loading  = document.getElementById('loading');
-const hintEl   = document.getElementById('hint');
-const regBar   = document.getElementById('regions-bar');
-const rempty   = document.getElementById('rempty');
-const btnAdd   = document.getElementById('btn-add');
-const btnRst   = document.getElementById('btn-rst');
-const btnSend  = document.getElementById('btn-send');
+const wrap    = document.getElementById('canvas-wrap');
+const cv      = document.getElementById('cv');
+const ctx     = cv.getContext('2d');
+const ov      = document.getElementById('ov');
+const drect   = document.getElementById('draw-rect');
+const handles = ['h-tl','h-tr','h-bl','h-br'].map(id => document.getElementById(id));
+const badge   = document.getElementById('badge');
+const noImg   = document.getElementById('no-img');
+const loading = document.getElementById('loading');
+const hintEl  = document.getElementById('hint');
+const regBar  = document.getElementById('regions-bar');
+const rempty  = document.getElementById('rempty');
+const btnAdd  = document.getElementById('btn-add');
+const btnRst  = document.getElementById('btn-rst');
+const btnSend = document.getElementById('btn-send');
 const scrubTrack = document.getElementById('scrub-track');
 const scrubProg  = document.getElementById('scrub-prog');
 const scrubHead  = document.getElementById('scrub-head');
 const scrubNow   = document.getElementById('scrub-now');
 const scrubEnd   = document.getElementById('scrub-end');
-const tlTrack  = document.getElementById('tl-track');
-const tlFill   = document.getElementById('tl-fill');
-const tlHs     = document.getElementById('tl-hs');
-const tlHe     = document.getElementById('tl-he');
-const tlS      = document.getElementById('tl-s');
-const tlD      = document.getElementById('tl-d');
-const tlRange  = document.getElementById('tl-range');
+const tlTrack = document.getElementById('tl-track');
+const tlFill  = document.getElementById('tl-fill');
+const tlHs    = document.getElementById('tl-hs');
+const tlHe    = document.getElementById('tl-he');
+const tlS     = document.getElementById('tl-s');
+const tlD     = document.getElementById('tl-d');
+const tlRange = document.getElementById('tl-range');
 
 const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 
-// ── Canvas ────────────────────────────────────────────────────────────
-let imgEl = null;
-new ResizeObserver(() => { cv.width = wrap.clientWidth; cv.height = wrap.clientHeight; redraw(); updateRegionOverlay(); }).observe(wrap);
+// ── Canvas resize ─────────────────────────────────────────────────
+new ResizeObserver(() => {
+  cv.width = wrap.clientWidth;
+  cv.height = wrap.clientHeight;
+  redraw();
+  updateRegionOverlay();
+}).observe(wrap);
 
 function redraw() {
   ctx.clearRect(0, 0, cv.width, cv.height);
   if (!imgEl) return;
-  const iw = imgEl.naturalWidth, ih = imgEl.naturalHeight;
+  const iw = imgEl.naturalWidth || imgEl.width;
+  const ih = imgEl.naturalHeight || imgEl.height;
+  if (!iw || !ih) return;
   const cw = cv.width, ch = cv.height;
-  const sc = Math.min(cw/iw, ch/ih);
-  ctx.drawImage(imgEl, (cw-iw*sc)/2, (ch-ih*sc)/2, iw*sc, ih*sc);
+  const sc = Math.min(cw / iw, ch / ih);
+  ctx.drawImage(imgEl, (cw - iw * sc) / 2, (ch - ih * sc) / 2, iw * sc, ih * sc);
 }
 
-// ── Load preview image ─────────────────────────────────────────────
+// ── Preview image ─────────────────────────────────────────────────
+// KEY FIX: do NOT set crossOrigin — Telegram WebApp blocks cross-origin
+// canvas reads anyway, and we only need to DISPLAY the image, not read pixels.
+let imgEl = null;
+
+function hideLoading() {
+  loading.classList.add('off');
+}
+
 if (imgUrl) {
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  // ❌ DO NOT set img.crossOrigin — causes CORS failure in Telegram WebApp
   img.onload = () => {
     imgEl = img;
-    loading.classList.add('off');
+    hideLoading();
     noImg.style.display = 'none';
-    cv.width = wrap.clientWidth; cv.height = wrap.clientHeight;
+    cv.width = wrap.clientWidth;
+    cv.height = wrap.clientHeight;
     redraw();
+    dbg('img loaded: ' + img.naturalWidth + 'x' + img.naturalHeight);
   };
-  img.onerror = () => {
-    loading.classList.add('off');
+  img.onerror = (e) => {
+    dbg('img error: ' + imgUrl.slice(0, 60));
+    hideLoading();
     noImg.style.display = 'flex';
   };
-  img.src = imgUrl;
+  // Small delay so the page renders first (avoids blank flash)
+  setTimeout(() => { img.src = imgUrl; }, 80);
 } else {
-  loading.classList.add('off');
+  hideLoading();
   noImg.style.display = 'flex';
 }
 
-// ── Scrubber (visual only — we have one frame) ─────────────────────
+// ── Scrubber ──────────────────────────────────────────────────────
 scrubEnd.textContent = fmt(duration);
 updateScrubUI();
 
 function updateScrubUI() {
   const pct = duration > 0 ? scrubTime / duration : 0;
-  scrubProg.style.width = (pct*100) + '%';
-  scrubHead.style.left  = (pct*100) + '%';
+  scrubProg.style.width = (pct * 100) + '%';
+  scrubHead.style.left  = (pct * 100) + '%';
   scrubNow.textContent  = fmt(scrubTime);
 }
 
@@ -337,31 +382,46 @@ function scrubPct(e) {
 
 scrubTrack.addEventListener('touchstart', e => {
   if (e.target.closest('#tl-track')) return;
-  draggingScrub = true; e.preventDefault(); e.stopPropagation();
-  scrubTime = scrubPct(e) * duration; updateScrubUI();
+  draggingScrub = true;
+  e.preventDefault();
+  e.stopPropagation();
+  scrubTime = scrubPct(e) * duration;
+  updateScrubUI();
 }, { passive: false });
+
 scrubTrack.addEventListener('mousedown', e => {
   draggingScrub = true;
-  scrubTime = scrubPct(e) * duration; updateScrubUI();
+  scrubTime = scrubPct(e) * duration;
+  updateScrubUI();
 });
+
 window.addEventListener('touchmove', e => {
-  if (draggingScrub) { e.preventDefault(); scrubTime = scrubPct(e) * duration; updateScrubUI(); }
+  if (draggingScrub) {
+    e.preventDefault();
+    scrubTime = scrubPct(e) * duration;
+    updateScrubUI();
+  }
 }, { passive: false });
+
 window.addEventListener('mousemove', e => {
-  if (draggingScrub) { scrubTime = scrubPct(e) * duration; updateScrubUI(); }
+  if (draggingScrub) {
+    scrubTime = scrubPct(e) * duration;
+    updateScrubUI();
+  }
 });
+
 window.addEventListener('touchend',  () => { draggingScrub = false; });
 window.addEventListener('mouseup',   () => { draggingScrub = false; });
 
-// ── Blur time range ────────────────────────────────────────────────
+// ── Blur time range ───────────────────────────────────────────────
 updateTl();
 
 function updateTl() {
-  const ps = tlStart/duration, pe = tlEnd/duration;
-  tlFill.style.left  = (ps*100) + '%';
-  tlFill.style.right = ((1-pe)*100) + '%';
-  tlHs.style.left    = (ps*100) + '%';
-  tlHe.style.right   = ((1-pe)*100) + '%';
+  const ps = tlStart / duration, pe = tlEnd / duration;
+  tlFill.style.left  = (ps * 100) + '%';
+  tlFill.style.right = ((1 - pe) * 100) + '%';
+  tlHs.style.left    = (ps * 100) + '%';
+  tlHe.style.right   = ((1 - pe) * 100) + '%';
   tlS.textContent = fmt(tlStart);
   tlD.textContent = fmt(duration);
   const isAll = tlStart <= 0.1 && tlEnd >= duration - 0.1;
@@ -374,19 +434,26 @@ function tlPct(e) {
   return Math.max(0, Math.min(1, (s.clientX - r.left) / r.width));
 }
 
-const startTl = w => e => { e.stopPropagation(); e.preventDefault(); draggingTl = w; };
+const startTl = w => e => {
+  e.stopPropagation();
+  e.preventDefault();
+  draggingTl = w;
+};
+
 tlHs.addEventListener('touchstart', startTl('s'), { passive: false });
 tlHe.addEventListener('touchstart', startTl('e'), { passive: false });
 tlHs.addEventListener('mousedown',  startTl('s'));
 tlHe.addEventListener('mousedown',  startTl('e'));
 
 window.addEventListener('touchmove', e => {
-  if (!draggingTl) return; e.preventDefault();
+  if (!draggingTl) return;
+  e.preventDefault();
   const p = tlPct(e) * duration;
   if (draggingTl === 's') tlStart = Math.max(0, Math.min(p, tlEnd - 0.5));
   else                     tlEnd   = Math.min(duration, Math.max(p, tlStart + 0.5));
   updateTl();
 }, { passive: false });
+
 window.addEventListener('mousemove', e => {
   if (!draggingTl) return;
   const p = tlPct(e) * duration;
@@ -394,10 +461,11 @@ window.addEventListener('mousemove', e => {
   else                     tlEnd   = Math.min(duration, Math.max(p, tlStart + 0.5));
   updateTl();
 });
+
 window.addEventListener('touchend', () => { draggingTl = null; });
 window.addEventListener('mouseup',  () => { draggingTl = null; });
 
-// ── Drawing ────────────────────────────────────────────────────────
+// ── Drawing ───────────────────────────────────────────────────────
 function getPos(e) {
   const r = wrap.getBoundingClientRect();
   const s = e.touches ? e.touches[0] : e;
@@ -414,10 +482,10 @@ function showDrawRect(a, b) {
     return;
   }
   const r = wrap.getBoundingClientRect();
-  const x1 = Math.min(a.x, b.x)*r.width,  y1 = Math.min(a.y, b.y)*r.height;
-  const x2 = Math.max(a.x, b.x)*r.width,  y2 = Math.max(a.y, b.y)*r.height;
+  const x1 = Math.min(a.x, b.x) * r.width,  y1 = Math.min(a.y, b.y) * r.height;
+  const x2 = Math.max(a.x, b.x) * r.width,  y2 = Math.max(a.y, b.y) * r.height;
   drect.setAttribute('x', x1); drect.setAttribute('y', y1);
-  drect.setAttribute('width', x2-x1); drect.setAttribute('height', y2-y1);
+  drect.setAttribute('width', x2 - x1); drect.setAttribute('height', y2 - y1);
   drect.style.display = 'block';
   [[x1,y1],[x2,y1],[x1,y2],[x2,y2]].forEach(([cx,cy], i) => {
     handles[i].setAttribute('cx', cx); handles[i].setAttribute('cy', cy);
@@ -428,58 +496,94 @@ function showDrawRect(a, b) {
 function isControlArea(e) {
   if (!e.target) return false;
   return e.target === tlHs || e.target === tlHe ||
-    e.target.closest('#bottom, #tl-track, #range-section, #scrubber-section, #regions-bar');
+    !!e.target.closest('#bottom, #tl-track, #range-section, #scrubber-section, #regions-bar');
 }
 
 wrap.addEventListener('touchstart', e => {
   if (isControlArea(e)) return;
-  e.preventDefault(); e.stopPropagation();
-  drawing = true; p0 = getPos(e); p1 = { ...p0 };
-  badge.classList.add('on'); hintEl.textContent = 'Рисую…';
+  e.preventDefault();
+  e.stopPropagation();
+  drawing = true;
+  p0 = getPos(e);
+  p1 = { ...p0 };
+  badge.classList.add('on');
+  hintEl.textContent = 'Рисую…';
 }, { passive: false, capture: true });
 
 wrap.addEventListener('touchmove', e => {
-  if (!drawing) return; e.preventDefault(); p1 = getPos(e); showDrawRect(p0, p1);
+  if (!drawing) return;
+  e.preventDefault();
+  p1 = getPos(e);
+  showDrawRect(p0, p1);
 }, { passive: false, capture: true });
 
 wrap.addEventListener('touchend', onUp, { passive: false, capture: true });
+
 wrap.addEventListener('mousedown', e => {
   if (isControlArea(e)) return;
-  e.preventDefault(); drawing = true; p0 = getPos(e); p1 = { ...p0 };
-  badge.classList.add('on'); hintEl.textContent = 'Рисую…';
+  e.preventDefault();
+  drawing = true;
+  p0 = getPos(e);
+  p1 = { ...p0 };
+  badge.classList.add('on');
+  hintEl.textContent = 'Рисую…';
 }, { capture: true });
-window.addEventListener('mousemove', e => { if (drawing) { p1 = getPos(e); showDrawRect(p0, p1); } });
+
+window.addEventListener('mousemove', e => {
+  if (drawing) { p1 = getPos(e); showDrawRect(p0, p1); }
+});
+
 window.addEventListener('mouseup', onUp);
 
 function onUp() {
-  if (!drawing) return; drawing = false;
-  badge.classList.remove('on'); hintEl.textContent = 'Рисуй пальцем на видео';
-  const dx = Math.abs((p1?.x||0)-(p0?.x||0)), dy = Math.abs((p1?.y||0)-(p0?.y||0));
-  if (dx < 0.02 || dy < 0.02) { showDrawRect(null, null); p0 = null; p1 = null; }
+  if (!drawing) return;
+  drawing = false;
+  badge.classList.remove('on');
+  hintEl.textContent = 'Рисуй пальцем на видео';
+  const dx = Math.abs((p1?.x || 0) - (p0?.x || 0));
+  const dy = Math.abs((p1?.y || 0) - (p0?.y || 0));
+  if (dx < 0.02 || dy < 0.02) {
+    showDrawRect(null, null);
+    p0 = null;
+    p1 = null;
+  }
 }
 
 // ── Add region ────────────────────────────────────────────────────
 btnAdd.addEventListener('click', () => {
   if (!p0 || !p1) { toast('Сначала нарисуй область на видео'); return; }
-  const x1 = Math.min(p0.x,p1.x), x2 = Math.max(p0.x,p1.x);
-  const y1 = Math.min(p0.y,p1.y), y2 = Math.max(p0.y,p1.y);
-  if ((x2-x1) < 0.02 || (y2-y1) < 0.02) { toast('Слишком маленькая область'); return; }
+  const x1 = Math.min(p0.x, p1.x), x2 = Math.max(p0.x, p1.x);
+  const y1 = Math.min(p0.y, p1.y), y2 = Math.max(p0.y, p1.y);
+  if ((x2 - x1) < 0.02 || (y2 - y1) < 0.02) { toast('Слишком маленькая область'); return; }
   regions.push({
     x1: +x1.toFixed(4), y1: +y1.toFixed(4),
     x2: +x2.toFixed(4), y2: +y2.toFixed(4),
     t0: +tlStart.toFixed(2), t1: +tlEnd.toFixed(2),
     color: COLORS[colorIdx++ % COLORS.length]
   });
-  showDrawRect(null, null); p0 = null; p1 = null;
-  renderRegions(); updateRegionOverlay(); btnSend.disabled = false; toast('✓ Добавлено!');
+  showDrawRect(null, null);
+  p0 = null;
+  p1 = null;
+  renderRegions();
+  updateRegionOverlay();
+  btnSend.disabled = false;
+  toast('✓ Добавлено!');
 });
 
 // ── Reset ─────────────────────────────────────────────────────────
 btnRst.addEventListener('click', () => {
-  regions = []; colorIdx = 0; p0 = null; p1 = null;
-  tlStart = 0; tlEnd = duration;
-  showDrawRect(null, null); updateTl(); renderRegions(); updateRegionOverlay();
-  btnSend.disabled = true; toast('Сброшено');
+  regions = [];
+  colorIdx = 0;
+  p0 = null;
+  p1 = null;
+  tlStart = 0;
+  tlEnd = duration;
+  showDrawRect(null, null);
+  updateTl();
+  renderRegions();
+  updateRegionOverlay();
+  btnSend.disabled = true;
+  toast('Сброшено');
 });
 
 // ── Regions list ──────────────────────────────────────────────────
@@ -489,13 +593,14 @@ function renderRegions() {
   rempty.style.display = 'none';
   regions.forEach((r, i) => {
     const isAll = r.t0 <= 0.1 && r.t1 >= duration - 0.1;
-    const row = document.createElement('div'); row.className = 'rrow';
+    const row = document.createElement('div');
+    row.className = 'rrow';
     row.innerHTML = `
       <div class="rdot" style="background:${r.color}"></div>
       <div class="rinfo">
         X:${(r.x1*100).toFixed(0)}–${(r.x2*100).toFixed(0)}%
         &nbsp;Y:${(r.y1*100).toFixed(0)}–${(r.y2*100).toFixed(0)}%
-        <span class="rtime">&nbsp;${isAll?'весь ролик':fmt(r.t0)+'→'+fmt(r.t1)}</span>
+        <span class="rtime">&nbsp;${isAll ? 'весь ролик' : fmt(r.t0) + '→' + fmt(r.t1)}</span>
       </div>
       <button class="rdel" data-i="${i}">✕</button>`;
     regBar.appendChild(row);
@@ -503,7 +608,9 @@ function renderRegions() {
   regBar.querySelectorAll('.rdel').forEach(btn => btn.addEventListener('click', e => {
     regions.splice(+e.currentTarget.dataset.i, 1);
     if (!regions.length) btnSend.disabled = true;
-    renderRegions(); updateRegionOverlay(); toast('Удалено');
+    renderRegions();
+    updateRegionOverlay();
+    toast('Удалено');
   }));
 }
 
@@ -512,47 +619,87 @@ function updateRegionOverlay() {
   ov.querySelectorAll('.rbox,.rbox-fill,.rlabel').forEach(el => el.remove());
   const r = wrap.getBoundingClientRect();
   regions.forEach((reg, i) => {
-    const x1 = reg.x1*r.width,  y1 = reg.y1*r.height;
-    const x2 = reg.x2*r.width,  y2 = reg.y2*r.height;
+    const x1 = reg.x1 * r.width,  y1 = reg.y1 * r.height;
+    const x2 = reg.x2 * r.width,  y2 = reg.y2 * r.height;
     const ns = 'http://www.w3.org/2000/svg';
     const fill = document.createElementNS(ns, 'rect');
-    fill.setAttribute('x',x1); fill.setAttribute('y',y1);
-    fill.setAttribute('width',x2-x1); fill.setAttribute('height',y2-y1);
-    fill.setAttribute('rx',3); fill.setAttribute('fill',reg.color);
-    fill.setAttribute('fill-opacity','0.18'); fill.setAttribute('class','rbox-fill');
+    fill.setAttribute('x', x1); fill.setAttribute('y', y1);
+    fill.setAttribute('width', x2 - x1); fill.setAttribute('height', y2 - y1);
+    fill.setAttribute('rx', 3); fill.setAttribute('fill', reg.color);
+    fill.setAttribute('fill-opacity', '0.18'); fill.setAttribute('class', 'rbox-fill');
     const box = document.createElementNS(ns, 'rect');
-    box.setAttribute('x',x1); box.setAttribute('y',y1);
-    box.setAttribute('width',x2-x1); box.setAttribute('height',y2-y1);
-    box.setAttribute('rx',3); box.setAttribute('fill','none');
-    box.setAttribute('stroke',reg.color); box.setAttribute('stroke-width','2.5');
-    box.setAttribute('class','rbox');
+    box.setAttribute('x', x1); box.setAttribute('y', y1);
+    box.setAttribute('width', x2 - x1); box.setAttribute('height', y2 - y1);
+    box.setAttribute('rx', 3); box.setAttribute('fill', 'none');
+    box.setAttribute('stroke', reg.color); box.setAttribute('stroke-width', '2.5');
+    box.setAttribute('class', 'rbox');
     const lbl = document.createElementNS(ns, 'text');
-    lbl.setAttribute('x',x1+5); lbl.setAttribute('y',y1+14);
-    lbl.setAttribute('class','rlabel'); lbl.setAttribute('fill',reg.color);
-    lbl.textContent = '#' + (i+1);
+    lbl.setAttribute('x', x1 + 5); lbl.setAttribute('y', y1 + 14);
+    lbl.setAttribute('class', 'rlabel'); lbl.setAttribute('fill', reg.color);
+    lbl.textContent = '#' + (i + 1);
     ov.appendChild(fill); ov.appendChild(box); ov.appendChild(lbl);
   });
 }
+
 window.addEventListener('resize', updateRegionOverlay);
 
-// ── Send ──────────────────────────────────────────────────────────
+// ── Send — robust multi-method ─────────────────────────────────────
+// tg.sendData() only works when WebApp is opened via KeyboardButton (reply keyboard).
+// It fails silently on some Telegram versions. We try it and fall back gracefully.
 btnSend.addEventListener('click', () => {
   if (!regions.length) return;
+
   const payload = JSON.stringify({
-    regions: regions.map(({ x1,y1,x2,y2,t0,t1 }) => ({ x1,y1,x2,y2,t0,t1 }))
+    regions: regions.map(({ x1, y1, x2, y2, t0, t1 }) => ({ x1, y1, x2, y2, t0, t1 }))
   });
+
+  dbg('Sending payload: ' + payload.slice(0, 80) + '...');
+
+  // Method 1: tg.sendData() — works when opened via ReplyKeyboard WebApp button
   if (tg && typeof tg.sendData === 'function') {
-    try { tg.sendData(payload); return; } catch(e) { console.error('sendData:', e); }
+    try {
+      tg.sendData(payload);
+      dbg('tg.sendData() called OK');
+      // Show confirmation and close
+      btnSend.textContent = '✓ Отправлено!';
+      btnSend.disabled = true;
+      setTimeout(() => {
+        try { tg.close(); } catch(e) {}
+      }, 800);
+      return;
+    } catch(e) {
+      dbg('tg.sendData() FAILED: ' + e);
+      // Fall through to next method
+    }
   }
-  try { window.parent.postMessage({ type: 'blur_regions', payload }, '*'); } catch(e) {}
+
+  // Method 2: postMessage to parent (works in some iframe contexts)
+  try {
+    window.parent.postMessage({ type: 'blur_regions', payload }, '*');
+    dbg('postMessage sent');
+  } catch(e) {
+    dbg('postMessage failed: ' + e);
+  }
+
+  // Method 3: TelegramGameProxy (legacy fallback)
+  try {
+    if (window.TelegramGameProxy) {
+      window.TelegramGameProxy.receiveEvent('blur_regions', payload);
+      dbg('TelegramGameProxy sent');
+    }
+  } catch(e) {}
+
   toast('Отправлено!');
+  btnSend.textContent = '✓ Отправлено!';
+  btnSend.disabled = true;
 });
 
 // ── Toast ─────────────────────────────────────────────────────────
 let toastTimer;
 function toast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
+  t.textContent = msg;
+  t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
 }
